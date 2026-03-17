@@ -1,0 +1,12 @@
+{
+  "name": "Copy of LogiPro rot Cepas",
+  "short_name": "LogiPro",
+  "description": "Gestión de material no apto y control de pallets",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#f59e0b",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
