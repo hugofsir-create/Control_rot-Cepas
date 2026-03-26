@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Box } from 'lucide-react';
+import { Box, Truck } from 'lucide-react';
+import { motion } from 'motion/react';
 
 export const LoadingScreen: React.FC = () => {
   const [progress, setProgress] = useState(0);
@@ -51,13 +52,32 @@ export const LoadingScreen: React.FC = () => {
             </span>
           </div>
           
-          {/* Progress Bar Track */}
-          <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
-            {/* Progress Bar Fill */}
-            <div 
-              className="h-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-300 ease-out shadow-[0_0_15px_rgba(245,158,11,0.3)]"
-              style={{ width: `${progress}%` }}
-            />
+          {/* Progress Bar Track with Truck */}
+          <div className="relative pt-8">
+            {/* Animated Truck */}
+            <motion.div 
+              className="absolute top-0 z-10"
+              animate={{ left: `${progress}%` }}
+              transition={{ type: 'spring', stiffness: 50, damping: 15 }}
+              style={{ x: '-50%' }}
+            >
+              <div className="relative">
+                <Truck className="w-8 h-8 text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                {/* Wheels animation effect */}
+                <div className="absolute bottom-1 left-1.5 w-1.5 h-1.5 bg-zinc-900 rounded-full animate-spin duration-75" />
+                <div className="absolute bottom-1 right-1.5 w-1.5 h-1.5 bg-zinc-900 rounded-full animate-spin duration-75" />
+              </div>
+            </motion.div>
+
+            {/* Progress Bar Track */}
+            <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800 shadow-inner">
+              {/* Progress Bar Fill */}
+              <motion.div 
+                className="h-full bg-gradient-to-r from-amber-600 via-amber-500 to-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)]"
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              />
+            </div>
           </div>
         </div>
 
