@@ -1,10 +1,11 @@
 
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { Pallet, PalletStatus } from '../types.ts';
 import { Button } from './ui/Button.tsx';
 import { 
   Plus, Box, PackageOpen, Edit, Trash2, FileBarChart, 
-  CheckSquare, Square, X, Lock, Trash, Printer
+  CheckSquare, Square, X, Lock, Trash, Printer, Download
 } from 'lucide-react';
 
 interface PalletListProps {
@@ -59,6 +60,47 @@ export const PalletList: React.FC<PalletListProps> = ({
     }
   };
 
+  const handleExportExcel = () => {
+    const selectedPallets = pallets.filter(p => selectedIds.includes(p.id));
+    
+    // Flatten data for Excel
+    const data = selectedPallets.flatMap(p => 
+      p.items.length > 0 
+        ? p.items.map(item => ({
+            'Pallet #': p.number,
+            'Referencia': p.reference || '',
+            'Estado': p.status,
+            'Creado': new Date(p.createdAt).toLocaleString(),
+            'Entrega': item.deliveryNumber,
+            'Viaje': item.tripNumber,
+            'SKU': item.sku,
+            'Descripción': item.description,
+            'Cantidad': item.quantity,
+            'Nota': item.note || ''
+          }))
+        : [{
+            'Pallet #': p.number,
+            'Referencia': p.reference || '',
+            'Estado': p.status,
+            'Creado': new Date(p.createdAt).toLocaleString(),
+            'Entrega': '',
+            'Viaje': '',
+            'SKU': '(VACÍO)',
+            'Descripción': 'Pallet sin items',
+            'Cantidad': 0,
+            'Nota': ''
+          }]
+    );
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Pallets");
+    
+    // Generate filename with current date
+    const dateStr = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `LOGIPRO_PALLETS_${dateStr}.xlsx`);
+  };
+
   const totalUnits = pallets.reduce((acc, pallet) => {
     return acc + pallet.items.reduce((sum, item) => sum + item.quantity, 0);
   }, 0);
@@ -75,19 +117,22 @@ export const PalletList: React.FC<PalletListProps> = ({
             <span className="text-xs font-black uppercase tracking-widest text-zinc-400">Seleccionados</span>
           </div>
           
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => onBulkPrint(selectedIds)} className="bg-zinc-950 border-zinc-800 hover:text-amber-500">
+          <div className="flex items-center gap-2 overflow-x-auto max-w-[50vw] md:max-w-none">
+            <Button variant="secondary" size="sm" onClick={() => onBulkPrint(selectedIds)} className="bg-zinc-950 border-zinc-800 hover:text-amber-500 whitespace-nowrap">
               <Printer className="w-4 h-4 mr-2" /> Imprimir
             </Button>
-            <Button variant="secondary" size="sm" onClick={handleBulkClose} className="bg-zinc-950 border-zinc-800 hover:text-emerald-500">
+            <Button variant="secondary" size="sm" onClick={handleExportExcel} className="bg-zinc-950 border-zinc-800 hover:text-blue-500 whitespace-nowrap">
+              <Download className="w-4 h-4 mr-2" /> Excel
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleBulkClose} className="bg-zinc-950 border-zinc-800 hover:text-emerald-500 whitespace-nowrap">
               <Lock className="w-4 h-4 mr-2" /> Cerrar
             </Button>
-            <Button variant="danger" size="sm" onClick={handleBulkDelete}>
+            <Button variant="danger" size="sm" onClick={handleBulkDelete} className="whitespace-nowrap">
               <Trash className="w-4 h-4 mr-2" /> Eliminar
             </Button>
             <button 
               onClick={() => setSelectedIds([])}
-              className="ml-2 p-2 hover:bg-zinc-800 rounded-full text-zinc-500 transition-colors"
+              className="ml-2 p-2 hover:bg-zinc-800 rounded-full text-zinc-500 transition-colors flex-shrink-0"
             >
               <X className="w-5 h-5" />
             </button>
