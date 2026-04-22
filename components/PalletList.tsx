@@ -5,7 +5,7 @@ import { Pallet, PalletStatus } from '../types.ts';
 import { Button } from './ui/Button.tsx';
 import { 
   Plus, Box, PackageOpen, Edit, Trash2, FileBarChart, 
-  CheckSquare, Square, X, Lock, Trash, Printer, Download
+  CheckSquare, Square, X, Lock, Trash, Printer, Download, Truck
 } from 'lucide-react';
 
 interface PalletListProps {
@@ -16,6 +16,7 @@ interface PalletListProps {
   onBulkDelete: (ids: string[]) => void;
   onBulkClose: (ids: string[]) => void;
   onBulkPrint: (ids: string[]) => void;
+  onBulkSend: (ids: string[]) => void;
   onOpenReport: () => void;
 }
 
@@ -27,6 +28,7 @@ export const PalletList: React.FC<PalletListProps> = ({
   onBulkDelete,
   onBulkClose,
   onBulkPrint,
+  onBulkSend,
   onOpenReport
 }) => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -58,6 +60,27 @@ export const PalletList: React.FC<PalletListProps> = ({
       onBulkClose(selectedIds);
       setSelectedIds([]);
     }
+  };
+
+  const handleBulkSend = () => {
+    const closedPallets = pallets.filter(p => selectedIds.includes(p.id) && p.status === PalletStatus.CLOSED);
+    if (closedPallets.length === 0) {
+      alert('Solo se pueden despachar pallets CERRADOS.');
+      return;
+    }
+    
+    if (closedPallets.length < selectedIds.length) {
+      if (!confirm(`${selectedIds.length - closedPallets.length} pallets no están cerrados y se omitirán. ¿Despachar los ${closedPallets.length} pallets cerrados?`)) {
+        return;
+      }
+    } else {
+      if (!confirm(`¿Despachar ${selectedIds.length} pallets seleccionados? Se generará un nuevo contenedor de envío.`)) {
+        return;
+      }
+    }
+
+    onBulkSend(closedPallets.map(p => p.id));
+    setSelectedIds([]);
   };
 
   const handleExportExcel = () => {
@@ -123,6 +146,9 @@ export const PalletList: React.FC<PalletListProps> = ({
             </Button>
             <Button variant="secondary" size="sm" onClick={handleExportExcel} className="bg-zinc-950 border-zinc-800 hover:text-blue-500 whitespace-nowrap">
               <Download className="w-4 h-4 mr-2" /> Excel
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleBulkSend} className="bg-zinc-950 border-zinc-800 hover:text-amber-500 whitespace-nowrap">
+              <Truck className="w-4 h-4 mr-2" /> Despachar
             </Button>
             <Button variant="secondary" size="sm" onClick={handleBulkClose} className="bg-zinc-950 border-zinc-800 hover:text-emerald-500 whitespace-nowrap">
               <Lock className="w-4 h-4 mr-2" /> Cerrar

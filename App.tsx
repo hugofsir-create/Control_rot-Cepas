@@ -9,6 +9,7 @@ import { PrintLabel } from './components/PrintLabel.tsx';
 import { ConsolidatedReport } from './components/ConsolidatedReport.tsx';
 import { ActivityHistory } from './components/ActivityHistory.tsx';
 import { LoadingScreen } from './components/LoadingScreen.tsx';
+import { ContainerList } from './components/ContainerList.tsx';
 // Added Button import to fix the "Cannot find name 'Button'" errors in the Settings modal
 import { Button } from './components/ui/Button.tsx';
 import { 
@@ -22,7 +23,8 @@ import {
   X,
   ShieldCheck,
   History,
-  Trash2
+  Trash2,
+  Truck
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -37,6 +39,7 @@ const App: React.FC = () => {
   const STORAGE_KEY_MATERIALS = 'materials_logipro_v6';
   const STORAGE_KEY_PALLETS = 'pallets_logipro_v6';
   const STORAGE_KEY_LOGS = 'logs_logipro_v6';
+  const STORAGE_KEY_CONTAINERS = 'containers_logipro_v6';
 
   const [materials, setMaterials] = useState<Material[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_MATERIALS);
@@ -53,6 +56,11 @@ const App: React.FC = () => {
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_LOGS);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [containers, setContainers] = useState<any[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_CONTAINERS);
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -74,6 +82,10 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(activityLogs));
   }, [activityLogs]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_CONTAINERS, JSON.stringify(containers));
+  }, [containers]);
 
   // --- Handlers ---
 
@@ -107,13 +119,39 @@ const App: React.FC = () => {
     addLog('Pallet Creado', `Se inició el Pallet #${nextNumber}`, 'SUCCESS');
   };
 
+  const handleBulkSend = (ids: string[]) => {
+    const dispatchId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const nextContainerNum = containers.length > 0 ? Math.max(...containers.map(c => c.number)) + 1 : 1;
+
+    const newContainer = {
+      id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).substring(2),
+      number: nextContainerNum,
+      dispatchId: dispatchId,
+      createdAt: new Date().toISOString(),
+      palletIds: ids,
+      note: `Envío masivo de ${ids.length} pallets.`
+    };
+
+    setContainers([newContainer, ...containers]);
+    setPallets(prev => prev.map(p => {
+      if (ids.includes(p.id)) {
+        return { ...p, status: PalletStatus.SENT, sentAt: new Date().toISOString(), containerId: newContainer.id };
+      }
+      return p;
+    }));
+
+    addLog('Despacho Generado', `Contenedor ${dispatchId} creado con ${ids.length} pallets`, 'SUCCESS');
+    setView('CONTAINER_LIST');
+  };
+
   const handleBackup = () => {
     const data = {
       materials,
       pallets,
       activityLogs,
+      containers,
       exportedAt: new Date().toISOString(),
-      version: '6.0'
+      version: '6.3'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -138,6 +176,7 @@ const App: React.FC = () => {
             setMaterials(data.materials);
             setPallets(data.pallets);
             if (data.activityLogs) setActivityLogs(data.activityLogs);
+            if (data.containers) setContainers(data.containers);
             alert('Datos restaurados con éxito.');
             setShowSettings(false);
             addLog('Sistema Restaurado', 'Se importó una copia de seguridad externa', 'WARNING');
@@ -157,6 +196,7 @@ const App: React.FC = () => {
       setMaterials([]);
       setPallets([]);
       setActivityLogs([]);
+      setContainers([]);
       localStorage.clear();
       addLog('SISTEMA', 'Reinicio total de la base de datos', 'INFO');
       setShowSettings(false);
@@ -239,13 +279,23 @@ const App: React.FC = () => {
            }
          }} />;
       case 'CONSOLIDATED_REPORT':
-        return <ConsolidatedReport pallets={pallets} materials={materials} onBack={() => setView('DASHBOARD')} />;
+        return <ConsolidatedReport pallets={pallets.filter(p => p.status !== PalletStatus.SENT)} materials={materials} onBack={() => setView('DASHBOARD')} />;
       case 'ACTIVITY_HISTORY':
         return <ActivityHistory logs={activityLogs} onBack={() => setView('DASHBOARD')} onClearLogs={() => setActivityLogs([])} />;
+      case 'CONTAINER_LIST':
+        return <ContainerList 
+          containers={containers} 
+          pallets={pallets} 
+          onBack={() => setView('DASHBOARD')}
+          onDeleteContainer={(id) => {
+            setContainers(prev => prev.filter(c => c.id !== id));
+            addLog('Despacho Eliminado', 'Se eliminó registro de despacho', 'DANGER');
+          }}
+        />;
       case 'DASHBOARD':
       default:
         return <PalletList 
-            pallets={pallets} 
+            pallets={pallets.filter(p => p.status !== PalletStatus.SENT)} 
             onAddPallet={handleCreatePallet} 
             onSelectPallet={(p) => { setSelectedPalletId(p.id); setView('PALLET_DETAIL'); }} 
             onDeletePallet={(id) => {
@@ -273,6 +323,7 @@ const App: React.FC = () => {
               setView('PRINT_PREVIEW');
               addLog('Impresión Masiva', `Se generó vista de impresión para ${ids.length} pallets`, 'INFO');
             }}
+            onBulkSend={handleBulkSend}
             onOpenReport={() => setView('CONSOLIDATED_REPORT')} 
           />;
     }
@@ -298,6 +349,7 @@ const App: React.FC = () => {
         <nav className="flex-1 py-6 space-y-2 px-2 lg:px-4">
           {[
             { id: 'DASHBOARD', icon: Box, label: 'Cargas' },
+            { id: 'CONTAINER_LIST', icon: Truck, label: 'Depósito / Salidas' },
             { id: 'MATERIALS', icon: Database, label: 'Maestro' },
             { id: 'CONSOLIDATED_REPORT', icon: ClipboardList, label: 'Inventario' },
             { id: 'ACTIVITY_HISTORY', icon: History, label: 'Historial' }
