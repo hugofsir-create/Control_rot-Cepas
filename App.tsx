@@ -291,6 +291,10 @@ const App: React.FC = () => {
             setContainers(prev => prev.filter(c => c.id !== id));
             addLog('Despacho Eliminado', 'Se eliminó registro de despacho', 'DANGER');
           }}
+          onUpdateContainer={(updatedContainer) => {
+            setContainers(prev => prev.map(c => c.id === updatedContainer.id ? updatedContainer : c));
+            addLog('Despacho Actualizado', `Se renombró el despacho a ${updatedContainer.dispatchId}`, 'INFO');
+          }}
         />;
       case 'DASHBOARD':
       default:

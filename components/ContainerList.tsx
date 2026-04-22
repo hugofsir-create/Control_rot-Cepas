@@ -2,21 +2,37 @@
 import React from 'react';
 import { Container, Pallet } from '../types.ts';
 import { Button } from './ui/Button.tsx';
-import { Truck, ArrowLeft, Package, Calendar, Info, Trash2 } from 'lucide-react';
+import { Truck, ArrowLeft, Package, Calendar, Info, Trash2, Edit } from 'lucide-react';
 
 interface ContainerListProps {
   containers: Container[];
   pallets: Pallet[];
   onBack: () => void;
   onDeleteContainer: (id: string) => void;
+  onUpdateContainer: (container: Container) => void;
 }
 
 export const ContainerList: React.FC<ContainerListProps> = ({ 
   containers, 
   pallets, 
   onBack,
-  onDeleteContainer
+  onDeleteContainer,
+  onUpdateContainer
 }) => {
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editValue, setEditValue] = React.useState('');
+
+  const startEditing = (container: Container) => {
+    setEditingId(container.id);
+    setEditValue(container.dispatchId);
+  };
+
+  const handleSave = (container: Container) => {
+    if (editValue.trim()) {
+      onUpdateContainer({ ...container, dispatchId: editValue.trim() });
+    }
+    setEditingId(null);
+  };
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-8">
@@ -46,11 +62,33 @@ export const ContainerList: React.FC<ContainerListProps> = ({
                     <div className="bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
                       <Truck className="w-6 h-6 text-amber-500" />
                     </div>
-                    <div>
-                      <h3 className="font-black italic uppercase text-zinc-100 tracking-tight">
-                        Despacho #{container.dispatchId}
-                      </h3>
-                      <div className="flex items-center gap-4 mt-1">
+                    <div className="flex-1">
+                      {editingId === container.id ? (
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="text" 
+                            className="bg-zinc-900 border border-amber-500/50 rounded px-2 py-1 text-zinc-100 text-sm font-bold uppercase outline-none focus:ring-1 focus:ring-amber-500"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSave(container)}
+                            autoFocus
+                          />
+                          <button 
+                            onClick={() => handleSave(container)}
+                            className="text-[10px] font-black uppercase text-amber-500 hover:text-amber-400"
+                          >
+                            Guardar
+                          </button>
+                        </div>
+                      ) : (
+                        <h3 
+                          className="font-black italic uppercase text-zinc-100 tracking-tight cursor-pointer hover:text-amber-500 transition-colors flex items-center gap-2 group"
+                          onClick={() => startEditing(container)}
+                        >
+                          Despacho #{container.dispatchId}
+                          <Edit className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </h3>
+                      )}                      <div className="flex items-center gap-4 mt-1">
                         <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-zinc-500">
                           <Calendar className="w-3 h-3" /> {new Date(container.createdAt).toLocaleString()}
                         </span>
