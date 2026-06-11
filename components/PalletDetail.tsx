@@ -5,12 +5,13 @@ import { Button } from './ui/Button.tsx';
 import { generatePalletSummary } from '../services/geminiService.ts';
 import { 
   ArrowLeft, Plus, Trash2, Lock, Printer, Bot, Unlock, 
-  X, Search, PackageSearch, Loader2, ClipboardCheck
+  X, Search, PackageSearch, Loader2, ClipboardCheck, Edit
 } from 'lucide-react';
 
 interface PalletDetailProps {
   pallet: Pallet;
   materials: Material[];
+  pallets?: Pallet[];
   onUpdatePallet: (updatedPallet: Pallet) => void;
   onAddOverflow?: (currentPallet: Pallet, overflowPalletsItems: PalletItem[][]) => void;
   onBack: () => void;
@@ -20,6 +21,7 @@ interface PalletDetailProps {
 export const PalletDetail: React.FC<PalletDetailProps> = ({ 
   pallet, 
   materials, 
+  pallets = [],
   onUpdatePallet, 
   onAddOverflow,
   onBack,
@@ -32,6 +34,27 @@ export const PalletDetail: React.FC<PalletDetailProps> = ({
   const [note, setNote] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  
+  const [isEditingNumber, setIsEditingNumber] = useState(false);
+  const [tempNumber, setTempNumber] = useState(pallet.number.toString());
+
+  useEffect(() => {
+    setTempNumber(pallet.number.toString());
+  }, [pallet.number]);
+
+  const handleSaveNumber = () => {
+    const val = parseInt(tempNumber, 10);
+    if (isNaN(val) || val <= 0) {
+      alert("Por favor introduce un número de pallet válido.");
+      return;
+    }
+    if (pallets.some(p => p.id !== pallet.id && p.number === val)) {
+      alert(`El pallet #${val} ya existe. Elige un número diferente.`);
+      return;
+    }
+    onUpdatePallet({ ...pallet, number: val });
+    setIsEditingNumber(false);
+  };
 
   const isClosed = pallet.status === PalletStatus.CLOSED;
 
@@ -177,7 +200,53 @@ export const PalletDetail: React.FC<PalletDetailProps> = ({
           </Button>
           <div>
             <h1 className="text-xl lg:text-2xl font-black italic tracking-tighter flex items-center gap-2 lg:gap-3">
-              PALLET <span className="text-amber-500">#{pallet.number}</span>
+              <span>PALLET</span>
+              {isEditingNumber && !isClosed ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    value={tempNumber}
+                    onChange={(e) => setTempNumber(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveNumber();
+                      if (e.key === 'Escape') {
+                        setTempNumber(pallet.number.toString());
+                        setIsEditingNumber(false);
+                      }
+                    }}
+                    className="w-16 bg-zinc-950 border border-amber-500 rounded px-1.5 py-0.5 text-amber-500 text-sm font-black italic outline-none focus:ring-1 focus:ring-amber-500"
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleSaveNumber}
+                    className="text-[10px] bg-amber-500 text-black px-1.5 py-0.5 rounded font-bold not-italic hover:bg-amber-400 transition-colors"
+                  >
+                    OK
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTempNumber(pallet.number.toString());
+                      setIsEditingNumber(false);
+                    }}
+                    className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-bold not-italic hover:bg-zinc-700 transition-colors"
+                  >
+                    X
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-amber-500">#{pallet.number}</span>
+                  {!isClosed && (
+                    <button
+                      onClick={() => setIsEditingNumber(true)}
+                      className="p-1 text-zinc-500 hover:text-amber-500 transition-colors"
+                      title="Editar número de pallet"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
               <span className={`text-[10px] tracking-widest px-2 py-0.5 rounded border font-black ${isClosed ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`}>
                 {pallet.status}
               </span>

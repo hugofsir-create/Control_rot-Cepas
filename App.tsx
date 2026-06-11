@@ -217,6 +217,7 @@ const App: React.FC = () => {
           <PalletDetail 
             pallet={currentPallet} 
             materials={materials} 
+            pallets={pallets}
             onUpdatePallet={(p) => {
               // Log specific actions in PalletDetail
               const oldPallet = pallets.find(old => old.id === p.id);
