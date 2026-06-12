@@ -53,9 +53,9 @@ export const PrintLabel: React.FC<PrintLabelProps> = ({ pallets, onBack }) => {
                           )}
                       </div>
                   </div>
-                  <div className="w-56 bg-black text-white flex flex-col items-center justify-center p-4">
-                      <span className="text-xs uppercase font-bold tracking-[0.2em] text-slate-400 mb-1">PALLET N°</span>
-                      <span className="text-9xl font-black leading-none">{pallet.number}</span>
+                  <div className="w-56 bg-white text-black flex flex-col items-center justify-center p-4">
+                      <span className="text-xs uppercase font-bold tracking-[0.2em] text-slate-500 mb-1">PALLET N°</span>
+                      <span className="text-9xl font-black leading-none text-black">{pallet.number}</span>
                   </div>
               </div>
 
