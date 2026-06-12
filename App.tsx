@@ -24,7 +24,8 @@ import {
   ShieldCheck,
   History,
   Trash2,
-  Truck
+  Truck,
+  Home
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -390,8 +391,8 @@ const App: React.FC = () => {
       {/* Modal de Ajustes y Copia de Seguridad */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl">
-            <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-950/50">
+          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-[2.5rem] shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-950/50 flex-shrink-0">
               <h3 className="font-black italic uppercase text-zinc-100 flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-amber-500" /> Seguridad de Datos
               </h3>
@@ -399,8 +400,21 @@ const App: React.FC = () => {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-8 space-y-6">
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
               <div className="space-y-4">
+                <div className="p-4 bg-zinc-950 rounded-2xl border border-amber-500/25">
+                  <p className="text-xs text-amber-500 mb-3 font-bold uppercase tracking-widest">Navegación</p>
+                  <Button 
+                    onClick={() => {
+                      setView('DASHBOARD');
+                      setShowSettings(false);
+                    }} 
+                    className="w-full justify-start py-3 bg-amber-500 hover:bg-amber-400 text-black font-bold border-amber-500"
+                  >
+                    <Home className="w-5 h-5 mr-3 text-black" /> Volver al Inicio (Cargas)
+                  </Button>
+                </div>
+
                 <div className="p-4 bg-zinc-950 rounded-2xl border border-zinc-800">
                   <p className="text-xs text-zinc-500 mb-2 font-bold uppercase tracking-widest">Información del Sistema</p>
                   <div className="grid grid-cols-2 gap-2 text-[8px] font-black uppercase tracking-tighter text-zinc-600">
@@ -412,11 +426,11 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="p-4 bg-zinc-950 rounded-2xl border border-zinc-800">
-                  <p className="text-xs text-zinc-500 mb-4 font-bold uppercase tracking-widest">Instalación PWA</p>
+                  <p className="text-xs text-zinc-500 mb-3 font-bold uppercase tracking-widest">Instalación PWA</p>
                   <Button 
                     variant="secondary" 
                     onClick={() => window.open(window.location.href, '_blank')} 
-                    className="w-full justify-start py-4 bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500 hover:text-black"
+                    className="w-full justify-start py-3 bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500 hover:text-black"
                   >
                     <ShieldCheck className="w-5 h-5 mr-3" /> Abrir para Instalar
                   </Button>
@@ -426,32 +440,32 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="p-4 bg-zinc-950 rounded-2xl border border-zinc-800">
-                  <p className="text-xs text-zinc-500 mb-4 font-bold uppercase tracking-widest">Copia Local del Sistema</p>
-                  <Button onClick={handleBackup} className="w-full justify-start py-4">
+                  <p className="text-xs text-zinc-500 mb-3 font-bold uppercase tracking-widest">Copia Local del Sistema</p>
+                  <Button onClick={handleBackup} className="w-full justify-start py-3">
                     <Download className="w-5 h-5 mr-3" /> Exportar Base de Datos
                   </Button>
                 </div>
 
                 <div className="p-4 bg-zinc-950 rounded-2xl border border-zinc-800">
-                  <p className="text-xs text-zinc-500 mb-4 font-bold uppercase tracking-widest">Restaurar Información</p>
+                  <p className="text-xs text-zinc-500 mb-3 font-bold uppercase tracking-widest">Restaurar Información</p>
                   <input type="file" ref={fileInputRef} onChange={handleRestore} accept=".json" className="hidden" />
-                  <Button variant="secondary" onClick={() => fileInputRef.current?.click()} className="w-full justify-start py-4">
+                  <Button variant="secondary" onClick={() => fileInputRef.current?.click()} className="w-full justify-start py-3">
                     <Upload className="w-5 h-5 mr-3" /> Importar Archivo .JSON
                   </Button>
                 </div>
 
                 <div className="p-4 bg-red-950/20 rounded-2xl border border-red-900/30">
-                  <p className="text-xs text-red-500/70 mb-4 font-bold uppercase tracking-widest">Zona de Peligro</p>
+                  <p className="text-xs text-red-500/70 mb-3 font-bold uppercase tracking-widest">Zona de Peligro</p>
                   <Button 
                     variant="secondary" 
                     onClick={handleResetData} 
-                    className="w-full justify-start py-4 text-red-500 border-red-900/50 hover:bg-red-500 hover:text-white"
+                    className="w-full justify-start py-3 text-red-500 border-red-900/50 hover:bg-red-500 hover:text-white"
                   >
                     <Trash2 className="w-5 h-5 mr-3" /> Resetear Todo el Sistema
                   </Button>
                 </div>
               </div>
-              <p className="text-[10px] text-center text-zinc-600 font-bold uppercase tracking-widest leading-relaxed">
+              <p className="text-[10px] text-center text-zinc-600 font-bold uppercase tracking-widest leading-relaxed mt-4">
                 LogiPro utiliza almacenamiento local del navegador.<br/>Exporta tus datos periódicamente para no perderlos.
               </p>
             </div>
