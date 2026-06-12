@@ -28,6 +28,16 @@ import {
   Home
 } from 'lucide-react';
 
+import { 
+  onSnapshot, 
+  collection, 
+  setDoc, 
+  doc, 
+  deleteDoc, 
+  getDocFromServer 
+} from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from './services/firebase.ts';
+
 const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState<ViewState>('DASHBOARD');
@@ -36,34 +46,208 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Persistence Keys
-  const STORAGE_KEY_MATERIALS = 'materials_logipro_v6';
-  const STORAGE_KEY_PALLETS = 'pallets_logipro_v6';
-  const STORAGE_KEY_LOGS = 'logs_logipro_v6';
-  const STORAGE_KEY_CONTAINERS = 'containers_logipro_v6';
+  const [materials, localSetMaterials] = useState<Material[]>([]);
+  const [pallets, localSetPallets] = useState<Pallet[]>([]);
+  const [activityLogs, localSetActivityLogs] = useState<ActivityLog[]>([]);
+  const [containers, localSetContainers] = useState<any[]>([]);
 
-  const [materials, setMaterials] = useState<Material[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_MATERIALS);
-    return saved ? JSON.parse(saved) : [
-        { sku: 'ELEC-100', description: 'MOTOR ELÉCTRICO TRIFÁSICO 10HP', boxesPerPallet: 24 },
-        { sku: 'TUB-PVC-50', description: 'TUBO PVC PRESIÓN 50MM X 6M', boxesPerPallet: 100 },
-    ];
-  });
+  useEffect(() => {
+    // Escuchar materiales en tiempo real
+    const unsubMaterials = onSnapshot(collection(db, 'materials'), (snapshot) => {
+      const list: Material[] = [];
+      snapshot.forEach(d => list.push(d.data() as Material));
+      
+      // Sembrar datos de demostración si la base de datos está vacía
+      if (snapshot.empty && list.length === 0) {
+        const defaultMaterials = [
+          { sku: 'ELEC-100', description: 'MOTOR ELÉCTRICO TRIFÁSICO 10HP', boxesPerPallet: 24 },
+          { sku: 'TUB-PVC-50', description: 'TUBO PVC PRESIÓN 50MM X 6M', boxesPerPallet: 100 },
+        ];
+        defaultMaterials.forEach(async (m) => {
+          try {
+            await setDoc(doc(db, 'materials', m.sku), m);
+          } catch (e) {
+            handleFirestoreError(e, OperationType.WRITE, `materials/${m.sku}`);
+          }
+        });
+      } else {
+        localSetMaterials(list);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'materials');
+    });
 
-  const [pallets, setPallets] = useState<Pallet[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PALLETS);
-    return saved ? JSON.parse(saved) : [];
-  });
+    // Escuchar pallets en tiempo real
+    const unsubPallets = onSnapshot(collection(db, 'pallets'), (snapshot) => {
+      const list: Pallet[] = [];
+      snapshot.forEach(d => list.push(d.data() as Pallet));
+      localSetPallets(list);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'pallets');
+    });
 
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_LOGS);
-    return saved ? JSON.parse(saved) : [];
-  });
+    // Escuchar containers en tiempo real
+    const unsubContainers = onSnapshot(collection(db, 'containers'), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach(d => list.push(d.data()));
+      localSetContainers(list);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'containers');
+    });
 
-  const [containers, setContainers] = useState<any[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_CONTAINERS);
-    return saved ? JSON.parse(saved) : [];
-  });
+    // Escuchar logs de actividad en tiempo real
+    const unsubLogs = onSnapshot(collection(db, 'activityLogs'), (snapshot) => {
+      const list: ActivityLog[] = [];
+      snapshot.forEach(d => list.push(d.data() as ActivityLog));
+      list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      localSetActivityLogs(list.slice(0, 100)); // Limitar a los últimos 100
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'activityLogs');
+    });
+
+    // Validar conexión al iniciar
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
+        }
+      }
+    }
+    testConnection();
+
+    return () => {
+      unsubMaterials();
+      unsubPallets();
+      unsubContainers();
+      unsubLogs();
+    };
+  }, []);
+
+  const setMaterials = async (updater: React.SetStateAction<Material[]>) => {
+    const resolved = typeof updater === 'function' ? updater(materials) : updater;
+    localSetMaterials(resolved);
+    
+    const currentSKUs = new Set(materials.map(m => m.sku));
+    const newSKUs = new Set(resolved.map(m => m.sku));
+
+    // Guardar/Actualizar
+    for (const m of resolved) {
+      const existing = materials.find(old => old.sku === m.sku);
+      if (!existing || existing.description !== m.description || existing.boxesPerPallet !== m.boxesPerPallet) {
+        try {
+          await setDoc(doc(db, 'materials', m.sku), m);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, `materials/${m.sku}`);
+        }
+      }
+    }
+
+    // Borrar eliminados
+    for (const m of materials) {
+      if (!newSKUs.has(m.sku)) {
+        try {
+          await deleteDoc(doc(db, 'materials', m.sku));
+        } catch (e) {
+          handleFirestoreError(e, OperationType.DELETE, `materials/${m.sku}`);
+        }
+      }
+    }
+  };
+
+  const setPallets = async (updater: React.SetStateAction<Pallet[]>) => {
+    const resolved = typeof updater === 'function' ? updater(pallets) : updater;
+    localSetPallets(resolved);
+
+    const currentIds = new Set(pallets.map(p => p.id));
+    const newIds = new Set(resolved.map(p => p.id));
+
+    // Guardar/Actualizar
+    for (const p of resolved) {
+      const existing = pallets.find(old => old.id === p.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(p)) {
+        try {
+          await setDoc(doc(db, 'pallets', p.id), p);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, `pallets/${p.id}`);
+        }
+      }
+    }
+
+    // Borrar eliminados
+    for (const p of pallets) {
+      if (!newIds.has(p.id)) {
+        try {
+          await deleteDoc(doc(db, 'pallets', p.id));
+        } catch (e) {
+          handleFirestoreError(e, OperationType.DELETE, `pallets/${p.id}`);
+        }
+      }
+    }
+  };
+
+  const setContainers = async (updater: React.SetStateAction<any[]>) => {
+    const resolved = typeof updater === 'function' ? updater(containers) : updater;
+    localSetContainers(resolved);
+
+    const currentIds = new Set(containers.map(c => c.id));
+    const newIds = new Set(resolved.map(c => c.id));
+
+    // Guardar/Actualizar
+    for (const c of resolved) {
+      const existing = containers.find(old => old.id === c.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(c)) {
+        try {
+          await setDoc(doc(db, 'containers', c.id), c);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, `containers/${c.id}`);
+        }
+      }
+    }
+
+    // Borrar eliminados
+    for (const c of containers) {
+      if (!newIds.has(c.id)) {
+        try {
+          await deleteDoc(doc(db, 'containers', c.id));
+        } catch (e) {
+          handleFirestoreError(e, OperationType.DELETE, `containers/${c.id}`);
+        }
+      }
+    }
+  };
+
+  const setActivityLogs = async (updater: React.SetStateAction<ActivityLog[]>) => {
+    const resolved = typeof updater === 'function' ? updater(activityLogs) : updater;
+    localSetActivityLogs(resolved);
+
+    const currentIds = new Set(activityLogs.map(l => l.id));
+    const newIds = new Set(resolved.map(l => l.id));
+
+    // Guardar/Actualizar
+    for (const l of resolved) {
+      const existing = activityLogs.find(old => old.id === l.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(l)) {
+        try {
+          await setDoc(doc(db, 'activityLogs', l.id), l);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, `activityLogs/${l.id}`);
+        }
+      }
+    }
+
+    // Borrar eliminados
+    for (const l of activityLogs) {
+      if (!newIds.has(l.id)) {
+        try {
+          await deleteDoc(doc(db, 'activityLogs', l.id));
+        } catch (e) {
+          handleFirestoreError(e, OperationType.DELETE, `activityLogs/${l.id}`);
+        }
+      }
+    }
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -71,22 +255,6 @@ const App: React.FC = () => {
     }, 3000);
     return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_MATERIALS, JSON.stringify(materials));
-  }, [materials]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PALLETS, JSON.stringify(pallets));
-  }, [pallets]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(activityLogs));
-  }, [activityLogs]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_CONTAINERS, JSON.stringify(containers));
-  }, [containers]);
 
   // --- Handlers ---
 

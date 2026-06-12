@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "Material": {
+      "title": "Material",
+      "description": "Un material maestro registrado en el sistema.",
+      "type": "object",
+      "properties": {
+        "sku": { "type": "string" },
+        "description": { "type": "string" },
+        "boxesPerPallet": { "type": "number" }
+      },
+      "required": ["sku", "description"]
+    },
+    "Pallet": {
+      "title": "Pallet",
+      "description": "Detalle de un pallet con sus items cargados.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "number" },
+        "reference": { "type": "string" },
+        "items": { "type": "array" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "closedAt": { "type": "string" },
+        "sentAt": { "type": "string" },
+        "containerId": { "type": "string" },
+        "aiSummary": { "type": "string" }
+      },
+      "required": ["id", "number", "items", "status", "createdAt"]
+    },
+    "Container": {
+      "title": "Container",
+      "description": "Contenedor de despacho que agrupa múltiples pallets.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "number" },
+        "dispatchId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "palletIds": { "type": "array" },
+        "note": { "type": "string" }
+      },
+      "required": ["id", "number", "dispatchId", "createdAt", "palletIds"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Registro de actividad de las operaciones de la app.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "type": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "action", "type"]
+    }
+  },
+  "firestore": {
+    "/materials/{materialId}": {
+      "schema": "Material",
+      "description": "Colección de materiales en el maestro."
+    },
+    "/pallets/{palletId}": {
+      "schema": "Pallet",
+      "description": "Colección de pallets."
+    },
+    "/containers/{containerId}": {
+      "schema": "Container",
+      "description": "Colección de contenedores de despacho."
+    },
+    "/activityLogs/{logId}": {
+      "schema": "ActivityLog",
+      "description": "Colección de registros de actividad."
+    }
+  }
+}
