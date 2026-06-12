@@ -39,7 +39,12 @@ import {
 import { db, handleFirestoreError, OperationType } from './services/firebase.ts';
 
 const App: React.FC = () => {
-  const [isLoading, setIsLoading] = useState(true);
+  const [materialsLoaded, setMaterialsLoaded] = useState(false);
+  const [palletsLoaded, setPalletsLoaded] = useState(false);
+  const [containersLoaded, setContainersLoaded] = useState(false);
+  const [logsLoaded, setLogsLoaded] = useState(false);
+  const [isTimerFinished, setIsTimerFinished] = useState(false);
+
   const [view, setView] = useState<ViewState>('DASHBOARD');
   const [selectedPalletId, setSelectedPalletId] = useState<string | null>(null);
   const [bulkPrintIds, setBulkPrintIds] = useState<string[]>([]);
@@ -50,6 +55,8 @@ const App: React.FC = () => {
   const [pallets, localSetPallets] = useState<Pallet[]>([]);
   const [activityLogs, localSetActivityLogs] = useState<ActivityLog[]>([]);
   const [containers, localSetContainers] = useState<any[]>([]);
+
+  const isLoading = !isTimerFinished || !materialsLoaded || !palletsLoaded || !containersLoaded || !logsLoaded;
 
   useEffect(() => {
     // Escuchar materiales en tiempo real
@@ -63,18 +70,19 @@ const App: React.FC = () => {
           { sku: 'ELEC-100', description: 'MOTOR ELÉCTRICO TRIFÁSICO 10HP', boxesPerPallet: 24 },
           { sku: 'TUB-PVC-50', description: 'TUBO PVC PRESIÓN 50MM X 6M', boxesPerPallet: 100 },
         ];
-        defaultMaterials.forEach(async (m) => {
-          try {
-            await setDoc(doc(db, 'materials', m.sku), m);
-          } catch (e) {
-            handleFirestoreError(e, OperationType.WRITE, `materials/${m.sku}`);
-          }
-        });
+        Promise.all(defaultMaterials.map(m => setDoc(doc(db, 'materials', m.sku), m)))
+          .then(() => setMaterialsLoaded(true))
+          .catch((e) => {
+            handleFirestoreError(e, OperationType.WRITE, 'materials/seed');
+            setMaterialsLoaded(true);
+          });
       } else {
         localSetMaterials(list);
+        setMaterialsLoaded(true);
       }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'materials');
+      setMaterialsLoaded(true);
     });
 
     // Escuchar pallets en tiempo real
@@ -82,8 +90,10 @@ const App: React.FC = () => {
       const list: Pallet[] = [];
       snapshot.forEach(d => list.push(d.data() as Pallet));
       localSetPallets(list);
+      setPalletsLoaded(true);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'pallets');
+      setPalletsLoaded(true);
     });
 
     // Escuchar containers en tiempo real
@@ -91,8 +101,10 @@ const App: React.FC = () => {
       const list: any[] = [];
       snapshot.forEach(d => list.push(d.data()));
       localSetContainers(list);
+      setContainersLoaded(true);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'containers');
+      setContainersLoaded(true);
     });
 
     // Escuchar logs de actividad en tiempo real
@@ -101,8 +113,10 @@ const App: React.FC = () => {
       snapshot.forEach(d => list.push(d.data() as ActivityLog));
       list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       localSetActivityLogs(list.slice(0, 100)); // Limitar a los últimos 100
+      setLogsLoaded(true);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'activityLogs');
+      setLogsLoaded(true);
     });
 
     // Validar conexión al iniciar
@@ -144,13 +158,15 @@ const App: React.FC = () => {
       }
     }
 
-    // Borrar eliminados
-    for (const m of materials) {
-      if (!newSKUs.has(m.sku)) {
-        try {
-          await deleteDoc(doc(db, 'materials', m.sku));
-        } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, `materials/${m.sku}`);
+    // Borrar eliminados (con salvaguarda de tamaño local y conexión viva)
+    if (resolved.length < materials.length && materials.length > 0) {
+      for (const m of materials) {
+        if (!newSKUs.has(m.sku)) {
+          try {
+            await deleteDoc(doc(db, 'materials', m.sku));
+          } catch (e) {
+            handleFirestoreError(e, OperationType.DELETE, `materials/${m.sku}`);
+          }
         }
       }
     }
@@ -175,13 +191,15 @@ const App: React.FC = () => {
       }
     }
 
-    // Borrar eliminados
-    for (const p of pallets) {
-      if (!newIds.has(p.id)) {
-        try {
-          await deleteDoc(doc(db, 'pallets', p.id));
-        } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, `pallets/${p.id}`);
+    // Borrar eliminados (con salvaguarda de tamaño local y conexión viva)
+    if (resolved.length < pallets.length && pallets.length > 0) {
+      for (const p of pallets) {
+        if (!newIds.has(p.id)) {
+          try {
+            await deleteDoc(doc(db, 'pallets', p.id));
+          } catch (e) {
+            handleFirestoreError(e, OperationType.DELETE, `pallets/${p.id}`);
+          }
         }
       }
     }
@@ -206,13 +224,15 @@ const App: React.FC = () => {
       }
     }
 
-    // Borrar eliminados
-    for (const c of containers) {
-      if (!newIds.has(c.id)) {
-        try {
-          await deleteDoc(doc(db, 'containers', c.id));
-        } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, `containers/${c.id}`);
+    // Borrar eliminados (con salvaguarda de tamaño local y conexión viva)
+    if (resolved.length < containers.length && containers.length > 0) {
+      for (const c of containers) {
+        if (!newIds.has(c.id)) {
+          try {
+            await deleteDoc(doc(db, 'containers', c.id));
+          } catch (e) {
+            handleFirestoreError(e, OperationType.DELETE, `containers/${c.id}`);
+          }
         }
       }
     }
@@ -237,13 +257,15 @@ const App: React.FC = () => {
       }
     }
 
-    // Borrar eliminados
-    for (const l of activityLogs) {
-      if (!newIds.has(l.id)) {
-        try {
-          await deleteDoc(doc(db, 'activityLogs', l.id));
-        } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, `activityLogs/${l.id}`);
+    // Borrar eliminados (con salvaguarda de tamaño local y conexión viva)
+    if (resolved.length < activityLogs.length && activityLogs.length > 0) {
+      for (const l of activityLogs) {
+        if (!newIds.has(l.id)) {
+          try {
+            await deleteDoc(doc(db, 'activityLogs', l.id));
+          } catch (e) {
+            handleFirestoreError(e, OperationType.DELETE, `activityLogs/${l.id}`);
+          }
         }
       }
     }
@@ -251,8 +273,8 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 3000);
+      setIsTimerFinished(true);
+    }, 2000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -589,7 +611,7 @@ const App: React.FC = () => {
                     <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">Versión: <span className="text-amber-500">6.2.0</span></div>
                     <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">Secure Context: <span className={window.isSecureContext ? 'text-emerald-500' : 'text-red-500'}>{window.isSecureContext ? 'SÍ' : 'NO'}</span></div>
                     <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">UUID Native: <span className={typeof crypto.randomUUID === 'function' ? 'text-emerald-500' : 'text-red-500'}>{typeof crypto.randomUUID === 'function' ? 'SÍ' : 'NO'}</span></div>
-                    <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">Storage: <span className="text-amber-500">LOCAL</span></div>
+                    <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">Storage: <span className="text-amber-500">FIRESTORE CLOUD</span></div>
                   </div>
                 </div>
 
@@ -634,7 +656,7 @@ const App: React.FC = () => {
                 </div>
               </div>
               <p className="text-[10px] text-center text-zinc-600 font-bold uppercase tracking-widest leading-relaxed mt-4">
-                LogiPro utiliza almacenamiento local del navegador.<br/>Exporta tus datos periódicamente para no perderlos.
+                LogiPro utiliza almacenamiento en la nube en tiempo real (Cloud Firestore).<br/>Tus datos están seguros y persistidos de manera permanente.
               </p>
             </div>
           </div>
