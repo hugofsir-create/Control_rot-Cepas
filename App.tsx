@@ -10,6 +10,7 @@ import { ConsolidatedReport } from './components/ConsolidatedReport.tsx';
 import { ActivityHistory } from './components/ActivityHistory.tsx';
 import { LoadingScreen } from './components/LoadingScreen.tsx';
 import { ContainerList } from './components/ContainerList.tsx';
+import { InventoryComparison } from './components/InventoryComparison.tsx';
 // Added Button import to fix the "Cannot find name 'Button'" errors in the Settings modal
 import { Button } from './components/ui/Button.tsx';
 import { 
@@ -25,7 +26,8 @@ import {
   History,
   Trash2,
   Truck,
-  Home
+  Home,
+  FileSpreadsheet
 } from 'lucide-react';
 
 import { 
@@ -472,6 +474,8 @@ const App: React.FC = () => {
          }} />;
       case 'CONSOLIDATED_REPORT':
         return <ConsolidatedReport pallets={pallets.filter(p => p.status !== PalletStatus.SENT)} materials={materials} onBack={() => setView('DASHBOARD')} />;
+      case 'INVENTORY_COMPARISON':
+        return <InventoryComparison pallets={pallets.filter(p => p.status !== PalletStatus.SENT)} materials={materials} onBack={() => setView('DASHBOARD')} onAddLog={addLog} />;
       case 'ACTIVITY_HISTORY':
         return <ActivityHistory logs={activityLogs} onBack={() => setView('DASHBOARD')} onClearLogs={() => setActivityLogs([])} />;
       case 'CONTAINER_LIST':
@@ -548,6 +552,7 @@ const App: React.FC = () => {
             { id: 'CONTAINER_LIST', icon: Truck, label: 'Depósito / Salidas' },
             { id: 'MATERIALS', icon: Database, label: 'Maestro' },
             { id: 'CONSOLIDATED_REPORT', icon: ClipboardList, label: 'Inventario' },
+            { id: 'INVENTORY_COMPARISON', icon: FileSpreadsheet, label: 'Comparar Excel' },
             { id: 'ACTIVITY_HISTORY', icon: History, label: 'Historial' }
           ].map((item) => (
             <button 
