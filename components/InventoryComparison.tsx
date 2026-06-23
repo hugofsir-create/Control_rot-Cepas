@@ -57,6 +57,7 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'MATCH' | 'MISMATCH' | 'ONLY_IN_SYSTEM' | 'ONLY_IN_EXCEL'>('ALL');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [detectedColumns, setDetectedColumns] = useState<{ sku: string; qty: string; desc: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Consolidate systems' internal active inventory
@@ -109,6 +110,7 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
       let qtyKey = '';
       let descKey = '';
 
+      // 1. Detect SKU Column candidate
       for (const k of keys) {
         const normalized = norm(k);
         if (skuCandidates.includes(normalized) || skuCandidates.some(c => normalized.includes(c))) {
@@ -116,8 +118,10 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
           break;
         }
       }
+      // Default to Column A (keys[0])
       if (!skuKey) skuKey = keys[0] || '';
 
+      // 2. Detect Quantity Column candidate - Priority candidate, fallback is Column C (keys[2])
       for (const k of keys) {
         const normalized = norm(k);
         if (qtyCandidates.includes(normalized) || qtyCandidates.some(c => normalized.includes(c))) {
@@ -125,8 +129,12 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
           break;
         }
       }
-      if (!qtyKey) qtyKey = keys.find(k => k !== skuKey) || keys[1] || '';
+      // Crucial: Column C (keys[2]) holds quantities. If no candidate matched, or we have 3+ columns, default to keys[2] for Column C.
+      if (!qtyKey) {
+        qtyKey = keys[2] || keys[1] || '';
+      }
 
+      // 3. Detect Description Column candidate
       for (const k of keys) {
         const normalized = norm(k);
         if (descCandidates.includes(normalized) || descCandidates.some(c => normalized.includes(c))) {
@@ -134,6 +142,17 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
           break;
         }
       }
+      // Default description to keys[1] (Column B) as long as it's not the same key
+      if (!descKey) {
+        descKey = keys.find(k => k !== skuKey && k !== qtyKey) || keys[1] || '';
+      }
+
+      // Save the detected column mapping
+      setDetectedColumns({
+        sku: skuKey,
+        qty: qtyKey,
+        desc: descKey
+      });
 
       // Build parsed array
       const parsedItems: ImportedItem[] = [];
@@ -144,7 +163,14 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
         if (!sku) return;
 
         let rawQty = row[qtyKey];
-        const quantity = typeof rawQty === 'number' ? rawQty : parseInt(rawQty, 10) || 0;
+        let quantity = 0;
+        if (typeof rawQty === 'number') {
+          quantity = Math.round(rawQty);
+        } else if (rawQty !== undefined && rawQty !== null) {
+          // Remove currency formatting and spaces, parse decimal numbers robustly
+          const cleaned = String(rawQty).replace(/[\s\$]/g, '').replace(/,/g, '.').trim();
+          quantity = Math.round(parseFloat(cleaned)) || 0;
+        }
         
         let desc = '';
         if (descKey && row[descKey]) {
@@ -175,7 +201,7 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
       if (onAddLog) {
         onAddLog(
           'Excel Comparativo Cargado', 
-          `Archivo ${name} procesado con ${parsedItems.length} SKUs únicos para comparar`, 
+          `Archivo ${name} procesado con ${parsedItems.length} SKUs únicos para comparar (Cantidades leídas de columna: ${qtyKey})`, 
           'INFO'
         );
       }
@@ -380,6 +406,7 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
     setImportedData([]);
     setFileName('');
     setErrorMessage(null);
+    setDetectedColumns(null);
     setSearchTerm('');
     setStatusFilter('ALL');
   };
@@ -476,6 +503,34 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
               <Download className="w-4 h-4 mr-2" /> Exportar Comparativa a Excel
             </Button>
           </div>
+
+          {/* Column mappings display for feedback */}
+          {detectedColumns && (
+            <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-850 flex flex-wrap gap-x-6 gap-y-3 text-xs">
+              <div className="flex items-center gap-1.5 text-zinc-400">
+                <Info className="w-4 h-4 text-amber-500" />
+                <span className="font-bold text-zinc-300">Asociación de Columnas:</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-zinc-500 font-medium">Columna SKU (A):</span>
+                <span className="bg-zinc-850 border border-zinc-750 px-2.5 py-1 rounded text-amber-500 font-mono font-bold text-[11px]">
+                  {detectedColumns.sku}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-zinc-500 font-medium">Columna Descripción (B):</span>
+                <span className="bg-zinc-850 border border-zinc-750 px-2.5 py-1 rounded text-zinc-300 font-mono text-[11px]">
+                  {detectedColumns.desc}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-amber-500 font-semibold">Columna Cantidad (C):</span>
+                <span className="bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded text-amber-400 font-mono font-black text-[11px]">
+                  {detectedColumns.qty}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Quick stats grid */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
