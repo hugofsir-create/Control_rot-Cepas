@@ -51,14 +51,55 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
   onBack,
   onAddLog
 }) => {
-  const [importedData, setImportedData] = useState<ImportedItem[]>([]);
-  const [fileName, setFileName] = useState<string>('');
+  const [importedData, setImportedData] = useState<ImportedItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('logipro_comparison_data');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [fileName, setFileName] = useState<string>(() => {
+    return localStorage.getItem('logipro_comparison_file') || '';
+  });
   const [isDragActive, setIsDragActive] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'MATCH' | 'MISMATCH' | 'ONLY_IN_SYSTEM' | 'ONLY_IN_EXCEL'>('ALL');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [detectedColumns, setDetectedColumns] = useState<{ sku: string; qty: string; desc: string } | null>(null);
+  const [detectedColumns, setDetectedColumns] = useState<{ sku: string; qty: string; desc: string } | null>(() => {
+    try {
+      const saved = localStorage.getItem('logipro_comparison_columns');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync state to localStorage
+  React.useEffect(() => {
+    if (importedData.length > 0) {
+      localStorage.setItem('logipro_comparison_data', JSON.stringify(importedData));
+    } else {
+      localStorage.removeItem('logipro_comparison_data');
+    }
+  }, [importedData]);
+
+  React.useEffect(() => {
+    if (fileName) {
+      localStorage.setItem('logipro_comparison_file', fileName);
+    } else {
+      localStorage.removeItem('logipro_comparison_file');
+    }
+  }, [fileName]);
+
+  React.useEffect(() => {
+    if (detectedColumns) {
+      localStorage.setItem('logipro_comparison_columns', JSON.stringify(detectedColumns));
+    } else {
+      localStorage.removeItem('logipro_comparison_columns');
+    }
+  }, [detectedColumns]);
 
   // 1. Consolidate systems' internal active inventory
   const systemConsolidated = useMemo(() => {
