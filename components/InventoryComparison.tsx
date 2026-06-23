@@ -412,7 +412,7 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full max-w-6xl mx-auto p-6 gap-6" id="inventory-comparison-container">
+    <div className="flex flex-col min-h-full max-w-6xl mx-auto p-6 gap-6" id="inventory-comparison-container">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -486,7 +486,7 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
         </div>
       ) : (
         /* Results Table View */
-        <div className="flex-1 flex flex-col gap-6 overflow-hidden">
+        <div className="flex flex-col gap-6 w-full">
           {/* File summary and fast info */}
           <div className="bg-zinc-900 p-4 rounded-xl border border-zinc-850 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -603,8 +603,8 @@ export const InventoryComparison: React.FC<InventoryComparisonProps> = ({
           </div>
 
           {/* Data grid / table */}
-          <div className="flex-1 bg-zinc-900 rounded-xl shadow-xl border border-zinc-850 flex flex-col overflow-hidden">
-            <div className="overflow-y-auto flex-1">
+          <div className="bg-zinc-900 rounded-xl shadow-xl border border-zinc-850 flex flex-col overflow-hidden">
+            <div className="overflow-x-auto w-full">
               <table className="w-full text-left text-sm">
                 <thead className="bg-zinc-950 sticky top-0 z-10">
                   <tr>
