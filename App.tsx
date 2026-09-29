@@ -1,7 +1,7 @@
 
 // LogiPro Control - Main Application Component
 import React, { useState, useEffect, useRef } from 'react';
-import { Material, Pallet, ViewState, PalletStatus, ActivityLog } from './types.ts';
+import { Material, Pallet, ViewState, PalletStatus, ActivityLog, RuralRemito } from './types.ts';
 import { MaterialMaster } from './components/MaterialMaster.tsx';
 import { PalletList } from './components/PalletList.tsx';
 import { PalletDetail } from './components/PalletDetail.tsx';
@@ -11,6 +11,7 @@ import { ActivityHistory } from './components/ActivityHistory.tsx';
 import { LoadingScreen } from './components/LoadingScreen.tsx';
 import { ContainerList } from './components/ContainerList.tsx';
 import { InventoryComparison } from './components/InventoryComparison.tsx';
+import { RuralWarehouse } from './components/RuralWarehouse.tsx';
 // Added Button import to fix the "Cannot find name 'Button'" errors in the Settings modal
 import { Button } from './components/ui/Button.tsx';
 import { 
@@ -27,7 +28,8 @@ import {
   Trash2,
   Truck,
   Home,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Building2
 } from 'lucide-react';
 
 import { 
@@ -44,6 +46,8 @@ const App: React.FC = () => {
   const [materialsLoaded, setMaterialsLoaded] = useState(false);
   const [palletsLoaded, setPalletsLoaded] = useState(false);
   const [containersLoaded, setContainersLoaded] = useState(false);
+  const [ruralRemitosLoaded, setRuralRemitosLoaded] = useState(false);
+  const [ruralMaterialsLoaded, setRuralMaterialsLoaded] = useState(false);
   const [logsLoaded, setLogsLoaded] = useState(false);
   const [isTimerFinished, setIsTimerFinished] = useState(false);
 
@@ -57,8 +61,10 @@ const App: React.FC = () => {
   const [pallets, localSetPallets] = useState<Pallet[]>([]);
   const [activityLogs, localSetActivityLogs] = useState<ActivityLog[]>([]);
   const [containers, localSetContainers] = useState<any[]>([]);
+  const [ruralRemitos, localSetRuralRemitos] = useState<RuralRemito[]>([]);
+  const [ruralMaterials, localSetRuralMaterials] = useState<Material[]>([]);
 
-  const isLoading = !isTimerFinished || !materialsLoaded || !palletsLoaded || !containersLoaded || !logsLoaded;
+  const isLoading = !isTimerFinished || !materialsLoaded || !palletsLoaded || !containersLoaded || !ruralRemitosLoaded || !ruralMaterialsLoaded || !logsLoaded;
 
   useEffect(() => {
     // Escuchar materiales en tiempo real
@@ -87,6 +93,17 @@ const App: React.FC = () => {
       setMaterialsLoaded(true);
     });
 
+    // Escuchar materiales de Bodega La Rural en tiempo real
+    const unsubRuralMaterials = onSnapshot(collection(db, 'ruralMaterials'), (snapshot) => {
+      const list: Material[] = [];
+      snapshot.forEach(d => list.push(d.data() as Material));
+      localSetRuralMaterials(list);
+      setRuralMaterialsLoaded(true);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'ruralMaterials');
+      setRuralMaterialsLoaded(true);
+    });
+
     // Escuchar pallets en tiempo real
     const unsubPallets = onSnapshot(collection(db, 'pallets'), (snapshot) => {
       const list: Pallet[] = [];
@@ -107,6 +124,18 @@ const App: React.FC = () => {
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'containers');
       setContainersLoaded(true);
+    });
+
+    // Escuchar remitos de Bodega La Rural en tiempo real
+    const unsubRuralRemitos = onSnapshot(collection(db, 'ruralRemitos'), (snapshot) => {
+      const list: RuralRemito[] = [];
+      snapshot.forEach(d => list.push(d.data() as RuralRemito));
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      localSetRuralRemitos(list);
+      setRuralRemitosLoaded(true);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'ruralRemitos');
+      setRuralRemitosLoaded(true);
     });
 
     // Escuchar logs de actividad en tiempo real
@@ -135,8 +164,10 @@ const App: React.FC = () => {
 
     return () => {
       unsubMaterials();
+      unsubRuralMaterials();
       unsubPallets();
       unsubContainers();
+      unsubRuralRemitos();
       unsubLogs();
     };
   }, []);
@@ -168,6 +199,37 @@ const App: React.FC = () => {
             await deleteDoc(doc(db, 'materials', m.sku));
           } catch (e) {
             handleFirestoreError(e, OperationType.DELETE, `materials/${m.sku}`);
+          }
+        }
+      }
+    }
+  };
+
+  const setRuralMaterials = async (updater: React.SetStateAction<Material[]>) => {
+    const resolved = typeof updater === 'function' ? updater(ruralMaterials) : updater;
+    localSetRuralMaterials(resolved);
+
+    const currentSKUs = new Set(ruralMaterials.map(m => m.sku));
+    const newSKUs = new Set(resolved.map(m => m.sku));
+
+    for (const m of resolved) {
+      const existing = ruralMaterials.find(old => old.sku === m.sku);
+      if (!existing || existing.description !== m.description || existing.boxesPerPallet !== m.boxesPerPallet) {
+        try {
+          await setDoc(doc(db, 'ruralMaterials', m.sku), m);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, `ruralMaterials/${m.sku}`);
+        }
+      }
+    }
+
+    if (resolved.length < ruralMaterials.length && ruralMaterials.length > 0) {
+      for (const m of ruralMaterials) {
+        if (!newSKUs.has(m.sku)) {
+          try {
+            await deleteDoc(doc(db, 'ruralMaterials', m.sku));
+          } catch (e) {
+            handleFirestoreError(e, OperationType.DELETE, `ruralMaterials/${m.sku}`);
           }
         }
       }
@@ -273,6 +335,39 @@ const App: React.FC = () => {
     }
   };
 
+  const setRuralRemitos = async (updater: React.SetStateAction<RuralRemito[]>) => {
+    const resolved = typeof updater === 'function' ? updater(ruralRemitos) : updater;
+    localSetRuralRemitos(resolved);
+
+    const currentIds = new Set(ruralRemitos.map(r => r.id));
+    const newIds = new Set(resolved.map(r => r.id));
+
+    // Guardar/Actualizar
+    for (const r of resolved) {
+      const existing = ruralRemitos.find(old => old.id === r.id);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(r)) {
+        try {
+          await setDoc(doc(db, 'ruralRemitos', r.id), r);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, `ruralRemitos/${r.id}`);
+        }
+      }
+    }
+
+    // Borrar eliminados
+    if (resolved.length < ruralRemitos.length && ruralRemitos.length > 0) {
+      for (const r of ruralRemitos) {
+        if (!newIds.has(r.id)) {
+          try {
+            await deleteDoc(doc(db, 'ruralRemitos', r.id));
+          } catch (e) {
+            handleFirestoreError(e, OperationType.DELETE, `ruralRemitos/${r.id}`);
+          }
+        }
+      }
+    }
+  };
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsTimerFinished(true);
@@ -294,8 +389,9 @@ const App: React.FC = () => {
   };
 
   const handleCreatePallet = () => {
-    const nextNumber = pallets.length > 0 
-      ? Math.max(...pallets.map(p => p.number)) + 1 
+    const centralPallets = pallets.filter(p => p.warehouse !== 'LA_RURAL');
+    const nextNumber = centralPallets.length > 0 
+      ? Math.max(...centralPallets.map(p => p.number)) + 1 
       : 1;
 
     const newPallet: Pallet = {
@@ -303,13 +399,103 @@ const App: React.FC = () => {
       number: nextNumber,
       items: [],
       status: PalletStatus.OPEN,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      warehouse: 'CENTRAL'
     };
 
     setPallets([newPallet, ...pallets]);
     setSelectedPalletId(newPallet.id);
     setView('PALLET_DETAIL');
-    addLog('Pallet Creado', `Se inició el Pallet #${nextNumber}`, 'SUCCESS');
+    addLog('Pallet Creado', `Se inició el Pallet #${nextNumber} en Almacén Central`, 'SUCCESS');
+  };
+
+  // Creación específica para Bodega La Rural con numeración independiente
+  const handleCreateRuralPallet = () => {
+    const ruralPallets = pallets.filter(p => p.warehouse === 'LA_RURAL');
+    const nextNumber = ruralPallets.length > 0 
+      ? Math.max(...ruralPallets.map(p => p.number)) + 1 
+      : 1;
+
+    const newPallet: Pallet = {
+      id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).substring(2),
+      number: nextNumber,
+      items: [],
+      status: PalletStatus.OPEN,
+      createdAt: new Date().toISOString(),
+      warehouse: 'LA_RURAL'
+    };
+
+    setPallets([newPallet, ...pallets]);
+    setSelectedPalletId(newPallet.id);
+    setView('PALLET_DETAIL');
+    addLog('Pallet Rural Creado', `Se inició el Pallet #${nextNumber} en Bodega La Rural`, 'SUCCESS');
+  };
+
+  // Agrupación con número de remito para Bodega La Rural
+  const handleGroupRuralRemito = (palletIds: string[], remitoNumber: string, remitoDate: string, carrier?: string, note?: string) => {
+    const nextNumber = ruralRemitos.length > 0 ? Math.max(...ruralRemitos.map(r => r.number)) + 1 : 1;
+    const newRemitoId = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+
+    const newRemito: RuralRemito = {
+      id: newRemitoId,
+      number: nextNumber,
+      remitoNumber: remitoNumber.trim().toUpperCase(),
+      createdAt: new Date(remitoDate || Date.now()).toISOString(),
+      palletIds: palletIds,
+      carrier: carrier || '',
+      note: note || ''
+    };
+
+    // Actualizar remitos
+    setRuralRemitos([newRemito, ...ruralRemitos]);
+
+    // Asignar número de remito y fecha a los pallets seleccionados
+    setPallets(prev => prev.map(p => {
+      if (palletIds.includes(p.id)) {
+        return {
+          ...p,
+          status: PalletStatus.REMITTED,
+          remitoNumber: remitoNumber.trim().toUpperCase(),
+          remitoDate: new Date(remitoDate || Date.now()).toISOString(),
+          remitoId: newRemitoId,
+          sentAt: new Date().toISOString()
+        };
+      }
+      return p;
+    }));
+
+    addLog('Remito La Rural', `Se agruparon ${palletIds.length} pallets bajo el Remito #${remitoNumber.trim().toUpperCase()}`, 'SUCCESS');
+  };
+
+  const handleUpdateRuralRemito = (updatedRemito: RuralRemito) => {
+    setRuralRemitos(prev => prev.map(r => r.id === updatedRemito.id ? updatedRemito : r));
+    // Sincronizar número de remito en los pallets
+    setPallets(prev => prev.map(p => {
+      if (p.remitoId === updatedRemito.id) {
+        return { ...p, remitoNumber: updatedRemito.remitoNumber };
+      }
+      return p;
+    }));
+    addLog('Remito Actualizado', `Se actualizó el Remito #${updatedRemito.remitoNumber}`, 'INFO');
+  };
+
+  const handleDeleteRuralRemito = (remitoId: string) => {
+    const target = ruralRemitos.find(r => r.id === remitoId);
+    setRuralRemitos(prev => prev.filter(r => r.id !== remitoId));
+    // Liberar los pallets asociados
+    setPallets(prev => prev.map(p => {
+      if (p.remitoId === remitoId) {
+        return {
+          ...p,
+          status: PalletStatus.CLOSED,
+          remitoNumber: undefined,
+          remitoDate: undefined,
+          remitoId: undefined
+        };
+      }
+      return p;
+    }));
+    addLog('Remito Eliminado', `Se liberaron los pallets del Remito #${target?.remitoNumber}`, 'WARNING');
   };
 
   const handleBulkSend = (ids: string[]) => {
@@ -343,8 +529,10 @@ const App: React.FC = () => {
       pallets,
       activityLogs,
       containers,
+      ruralRemitos,
+      ruralMaterials,
       exportedAt: new Date().toISOString(),
-      version: '6.3'
+      version: '6.4'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -370,6 +558,8 @@ const App: React.FC = () => {
             setPallets(data.pallets);
             if (data.activityLogs) setActivityLogs(data.activityLogs);
             if (data.containers) setContainers(data.containers);
+            if (data.ruralRemitos) setRuralRemitos(data.ruralRemitos);
+            if (data.ruralMaterials) setRuralMaterials(data.ruralMaterials);
             alert('Datos restaurados con éxito.');
             setShowSettings(false);
             addLog('Sistema Restaurado', 'Se importó una copia de seguridad externa', 'WARNING');
@@ -390,6 +580,8 @@ const App: React.FC = () => {
       setPallets([]);
       setActivityLogs([]);
       setContainers([]);
+      setRuralRemitos([]);
+      setRuralMaterials([]);
       localStorage.clear();
       addLog('SISTEMA', 'Reinicio total de la base de datos', 'INFO');
       setShowSettings(false);
@@ -403,14 +595,58 @@ const App: React.FC = () => {
     switch (view) {
       case 'MATERIALS':
         return <MaterialMaster materials={materials} setMaterials={(m) => { setMaterials(m); addLog('Maestro Actualizado', 'Se realizaron cambios en la base de materiales', 'INFO'); }} onBack={() => setView('DASHBOARD')} />;
+      case 'RURAL_WAREHOUSE':
+        return (
+          <RuralWarehouse
+            pallets={pallets.filter(p => p.warehouse === 'LA_RURAL')}
+            materials={materials}
+            ruralMaterials={ruralMaterials}
+            setRuralMaterials={setRuralMaterials}
+            remitos={ruralRemitos}
+            onAddPallet={handleCreateRuralPallet}
+            onSelectPallet={(p) => { setSelectedPalletId(p.id); setView('PALLET_DETAIL'); }}
+            onDeletePallet={(id) => {
+              if (confirm('¿Borrar pallet de Bodega La Rural?')) {
+                const p = pallets.find(pal => pal.id === id);
+                setPallets(prev => prev.filter(pal => pal.id !== id));
+                addLog('Pallet Eliminado', `Se eliminó el Pallet #${p?.number} de Bodega La Rural`, 'DANGER');
+              }
+            }}
+            onBulkDelete={(ids) => {
+              setPallets(prev => prev.filter(p => !ids.includes(p.id)));
+              addLog('Eliminación Masiva', `Se eliminaron ${ids.length} pallets de Bodega La Rural`, 'DANGER');
+            }}
+            onBulkClose={(ids) => {
+              setPallets(prev => prev.map(p => {
+                if (ids.includes(p.id) && p.status === PalletStatus.OPEN) {
+                  return { ...p, status: PalletStatus.CLOSED, closedAt: new Date().toISOString() };
+                }
+                return p;
+              }));
+              addLog('Cierre Masivo', `Se cerraron ${ids.length} pallets de Bodega La Rural`, 'SUCCESS');
+            }}
+            onBulkPrint={(ids) => {
+              setBulkPrintIds(ids);
+              setView('PRINT_PREVIEW');
+              addLog('Impresión Masiva', `Se generó vista de impresión para ${ids.length} pallets de Bodega La Rural`, 'INFO');
+            }}
+            onGroupWithRemito={handleGroupRuralRemito}
+            onUpdateRemito={handleUpdateRuralRemito}
+            onDeleteRemito={handleDeleteRuralRemito}
+          />
+        );
       case 'PALLET_DETAIL':
         const currentPallet = pallets.find(p => p.id === selectedPalletId);
         if (!currentPallet) return <div className="p-20 text-center opacity-50 font-black uppercase italic tracking-widest">Pallet No Encontrado</div>;
+        const isRural = currentPallet.warehouse === 'LA_RURAL';
+        const relevantPallets = pallets.filter(p => isRural ? p.warehouse === 'LA_RURAL' : p.warehouse !== 'LA_RURAL');
+        const relevantMaterials = isRural && ruralMaterials.length > 0 ? ruralMaterials : materials;
+
         return (
           <PalletDetail 
             pallet={currentPallet} 
-            materials={materials} 
-            pallets={pallets}
+            materials={relevantMaterials} 
+            pallets={relevantPallets}
             onUpdatePallet={(p) => {
               // Log specific actions in PalletDetail
               const oldPallet = pallets.find(old => old.id === p.id);
@@ -430,7 +666,8 @@ const App: React.FC = () => {
               const count = overflow.length;
               
               setPallets(prev => {
-                const currentMax = prev.length > 0 ? Math.max(...prev.map(p => p.number)) : 0;
+                const whPallets = prev.filter(pal => isRural ? pal.warehouse === 'LA_RURAL' : pal.warehouse !== 'LA_RURAL');
+                const currentMax = whPallets.length > 0 ? Math.max(...whPallets.map(p => p.number)) : 0;
                 let nextNum = currentMax + 1;
                 
                 const newPallets: Pallet[] = overflow.map(items => ({
@@ -438,15 +675,15 @@ const App: React.FC = () => {
                   number: nextNum++,
                   items: items,
                   status: PalletStatus.OPEN,
-                  createdAt: new Date().toISOString()
+                  createdAt: new Date().toISOString(),
+                  warehouse: isRural ? 'LA_RURAL' : 'CENTRAL'
                 }));
 
                 const updated = prev.map(p => p.id === updatedCurrent.id ? updatedCurrent : p);
                 
-                // We'll add logs after state update to avoid side effects in reducer
                 setTimeout(() => {
                   newPallets.forEach(np => {
-                    addLog('Pallet Creado (Auto)', `Se inició el Pallet #${np.number} por exceso de capacidad`, 'SUCCESS');
+                    addLog('Pallet Creado (Auto)', `Se inició el Pallet #${np.number} por exceso de capacidad (${isRural ? 'La Rural' : 'Central'})`, 'SUCCESS');
                   });
                   alert(`DISTRIBUCIÓN AUTOMÁTICA:\nSe han generado ${count} pallets adicionales.\nTotal de pallets para esta carga: ${count + 1}.`);
                 }, 100);
@@ -454,7 +691,7 @@ const App: React.FC = () => {
                 return [...newPallets.slice().reverse(), ...updated];
               });
             }}
-            onBack={() => setView('DASHBOARD')} 
+            onBack={() => setView(isRural ? 'RURAL_WAREHOUSE' : 'DASHBOARD')} 
             onPrint={(p) => { 
               setBulkPrintIds([p.id]); 
               setView('PRINT_PREVIEW'); 
@@ -465,11 +702,12 @@ const App: React.FC = () => {
       case 'PRINT_PREVIEW':
          const printPallets = pallets.filter(p => bulkPrintIds.includes(p.id));
          if (printPallets.length === 0) return null;
+         const isAnyRural = printPallets.some(p => p.warehouse === 'LA_RURAL');
          return <PrintLabel pallets={printPallets} onBack={() => {
            if (bulkPrintIds.length === 1 && selectedPalletId === bulkPrintIds[0]) {
              setView('PALLET_DETAIL');
            } else {
-             setView('DASHBOARD');
+             setView(isAnyRural ? 'RURAL_WAREHOUSE' : 'DASHBOARD');
            }
          }} />;
       case 'CONSOLIDATED_REPORT':
@@ -495,7 +733,7 @@ const App: React.FC = () => {
       case 'DASHBOARD':
       default:
         return <PalletList 
-            pallets={pallets.filter(p => p.status !== PalletStatus.SENT)} 
+            pallets={pallets.filter(p => p.warehouse !== 'LA_RURAL' && p.status !== PalletStatus.SENT)} 
             onAddPallet={handleCreatePallet} 
             onSelectPallet={(p) => { setSelectedPalletId(p.id); setView('PALLET_DETAIL'); }} 
             onDeletePallet={(id) => {
@@ -548,22 +786,37 @@ const App: React.FC = () => {
         
         <nav className="flex-1 py-6 space-y-2 px-2 lg:px-4">
           {[
-            { id: 'DASHBOARD', icon: Box, label: 'Cargas' },
+            { id: 'DASHBOARD', icon: Box, label: 'Cargas Central' },
+            { id: 'RURAL_WAREHOUSE', icon: Building2, label: 'Bodega La Rural' },
             { id: 'CONTAINER_LIST', icon: Truck, label: 'Depósito / Salidas' },
-            { id: 'MATERIALS', icon: Database, label: 'Maestro' },
-            { id: 'CONSOLIDATED_REPORT', icon: ClipboardList, label: 'Inventario' },
+            { id: 'MATERIALS', icon: Database, label: 'Maestro Materiales' },
+            { id: 'CONSOLIDATED_REPORT', icon: ClipboardList, label: 'Inventario General' },
             { id: 'INVENTORY_COMPARISON', icon: FileSpreadsheet, label: 'Comparar Excel' },
             { id: 'ACTIVITY_HISTORY', icon: History, label: 'Historial' }
-          ].map((item) => (
-            <button 
-              key={item.id}
-              onClick={() => setView(item.id as ViewState)}
-              className={`w-full flex items-center justify-center lg:justify-start p-3 rounded-xl transition-all ${view === item.id || (view === 'PALLET_DETAIL' && item.id === 'DASHBOARD') ? 'bg-amber-600 text-white shadow-lg' : 'text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200'}`}
-            >
-              <item.icon className="w-6 h-6 flex-shrink-0" />
-              <span className="ml-3 font-bold uppercase tracking-tight text-xs hidden lg:block">{item.label}</span>
-            </button>
-          ))}
+          ].map((item) => {
+            const isSelected = view === item.id || 
+              (view === 'PALLET_DETAIL' && (
+                (item.id === 'RURAL_WAREHOUSE' && pallets.find(p => p.id === selectedPalletId)?.warehouse === 'LA_RURAL') ||
+                (item.id === 'DASHBOARD' && pallets.find(p => p.id === selectedPalletId)?.warehouse !== 'LA_RURAL')
+              ));
+
+            return (
+              <button 
+                key={item.id}
+                onClick={() => setView(item.id as ViewState)}
+                className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${
+                  isSelected 
+                    ? 'bg-amber-600 text-white shadow-lg' 
+                    : 'text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200'
+                }`}
+              >
+                <div className="flex items-center">
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  <span className="ml-3 font-bold uppercase tracking-tight text-xs hidden lg:block">{item.label}</span>
+                </div>
+              </button>
+            );
+          })}
         </nav>
 
         <div className="p-2 lg:p-4 space-y-2 border-t border-zinc-900">
@@ -597,25 +850,34 @@ const App: React.FC = () => {
             </div>
             <div className="p-6 overflow-y-auto space-y-4 flex-1">
               <div className="space-y-4">
-                <div className="p-4 bg-zinc-950 rounded-2xl border border-amber-500/25">
-                  <p className="text-xs text-amber-500 mb-3 font-bold uppercase tracking-widest">Navegación</p>
+                <div className="p-4 bg-zinc-950 rounded-2xl border border-amber-500/25 space-y-2">
+                  <p className="text-xs text-amber-500 font-bold uppercase tracking-widest">Navegación Rápida</p>
                   <Button 
                     onClick={() => {
                       setView('DASHBOARD');
                       setShowSettings(false);
                     }} 
-                    className="w-full justify-start py-3 bg-amber-500 hover:bg-amber-400 text-black font-bold border-amber-500"
+                    className="w-full justify-start py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold border-amber-500"
                   >
-                    <Home className="w-5 h-5 mr-3 text-black" /> Volver al Inicio (Cargas)
+                    <Home className="w-4 h-4 mr-3 text-black" /> Almacén Central (Cargas)
+                  </Button>
+                  <Button 
+                    onClick={() => {
+                      setView('RURAL_WAREHOUSE');
+                      setShowSettings(false);
+                    }} 
+                    className="w-full justify-start py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold border-zinc-700"
+                  >
+                    <Building2 className="w-4 h-4 mr-3 text-amber-500" /> Bodega La Rural (Segundo Almacén)
                   </Button>
                 </div>
 
                 <div className="p-4 bg-zinc-950 rounded-2xl border border-zinc-800">
                   <p className="text-xs text-zinc-500 mb-2 font-bold uppercase tracking-widest">Información del Sistema</p>
                   <div className="grid grid-cols-2 gap-2 text-[8px] font-black uppercase tracking-tighter text-zinc-600">
-                    <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">Versión: <span className="text-amber-500">6.2.0</span></div>
-                    <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">Secure Context: <span className={window.isSecureContext ? 'text-emerald-500' : 'text-red-500'}>{window.isSecureContext ? 'SÍ' : 'NO'}</span></div>
-                    <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">UUID Native: <span className={typeof crypto.randomUUID === 'function' ? 'text-emerald-500' : 'text-red-500'}>{typeof crypto.randomUUID === 'function' ? 'SÍ' : 'NO'}</span></div>
+                    <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">Versión: <span className="text-amber-500">6.4.0</span></div>
+                    <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">Bodegas: <span className="text-amber-500">2 ACTIVAS</span></div>
+                    <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">UUID Native: <span className={typeof crypto.randomUUID === 'function' ? 'text-amber-400' : 'text-red-400'}>{typeof crypto.randomUUID === 'function' ? 'SÍ' : 'NO'}</span></div>
                     <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">Storage: <span className="text-amber-500">FIRESTORE CLOUD</span></div>
                   </div>
                 </div>
@@ -637,7 +899,7 @@ const App: React.FC = () => {
                 <div className="p-4 bg-zinc-950 rounded-2xl border border-zinc-800">
                   <p className="text-xs text-zinc-500 mb-3 font-bold uppercase tracking-widest">Copia Local del Sistema</p>
                   <Button onClick={handleBackup} className="w-full justify-start py-3">
-                    <Download className="w-5 h-5 mr-3" /> Exportar Base de Datos
+                    <Download className="w-5 h-5 mr-3" /> Exportar Base de Datos Completa
                   </Button>
                 </div>
 
@@ -661,7 +923,7 @@ const App: React.FC = () => {
                 </div>
               </div>
               <p className="text-[10px] text-center text-zinc-600 font-bold uppercase tracking-widest leading-relaxed mt-4">
-                LogiPro utiliza almacenamiento en la nube en tiempo real (Cloud Firestore).<br/>Tus datos están seguros y persistidos de manera permanente.
+                LogiPro utiliza almacenamiento en la nube en tiempo real (Cloud Firestore).<br/>Tus datos de Almacén Central y Bodega La Rural están sincronizados y seguros.
               </p>
             </div>
           </div>

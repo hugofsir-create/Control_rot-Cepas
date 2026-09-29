@@ -209,8 +209,8 @@ export const PalletList: React.FC<PalletListProps> = ({
                 relative group bg-zinc-900 rounded-lg shadow-lg border transition-all hover:shadow-xl hover:bg-zinc-800 cursor-pointer hover:-translate-y-1 flex flex-col
                 ${isSelected ? 'ring-2 ring-amber-500 border-amber-500/50' : ''}
                 ${pallet.status === PalletStatus.CLOSED 
-                  ? 'border-l-4 border-l-red-500 border-y-zinc-800 border-r-zinc-800' 
-                  : 'border-l-4 border-l-emerald-500 border-y-zinc-800 border-r-zinc-800'}
+                  ? 'border-l-4 border-l-zinc-600 border-y-zinc-800 border-r-zinc-800' 
+                  : 'border-l-4 border-l-amber-500 border-y-zinc-800 border-r-zinc-800'}
               `}
               onClick={() => onSelectPallet(pallet)}
             >
@@ -225,11 +225,11 @@ export const PalletList: React.FC<PalletListProps> = ({
               <div className="p-5 flex-1 flex flex-col">
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-2">
-                     <Box className={`w-5 h-5 ${pallet.status === PalletStatus.CLOSED ? 'text-red-500' : 'text-emerald-500'}`} />
+                     <Box className={`w-5 h-5 ${pallet.status === PalletStatus.CLOSED ? 'text-zinc-500' : 'text-amber-500'}`} />
                      <h3 className="font-bold text-lg text-zinc-100">Pallet #{pallet.number}</h3>
                   </div>
                   <div className="mr-8"> {/* Space for checkbox */}
-                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${pallet.status === PalletStatus.CLOSED ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${pallet.status === PalletStatus.CLOSED ? 'bg-zinc-800 text-zinc-400 border border-zinc-700' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
                       {pallet.status}
                     </span>
                   </div>

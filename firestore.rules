@@ -4,10 +4,16 @@ service cloud.firestore {
     match /materials/{materialId} {
       allow read, write: if true;
     }
+    match /ruralMaterials/{materialId} {
+      allow read, write: if true;
+    }
     match /pallets/{palletId} {
       allow read, write: if true;
     }
     match /containers/{containerId} {
+      allow read, write: if true;
+    }
+    match /ruralRemitos/{remitoId} {
       allow read, write: if true;
     }
     match /activityLogs/{logId} {

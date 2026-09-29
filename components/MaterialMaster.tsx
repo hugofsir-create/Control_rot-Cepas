@@ -1,21 +1,52 @@
 import React, { useState, useRef } from 'react';
 import { Material } from '../types.ts';
 import { Button } from './ui/Button.tsx';
-import { Plus, Trash2, Search, Package, Upload, Download, ClipboardList } from 'lucide-react';
-import { read, utils } from 'xlsx';
+import { Plus, Trash2, Search, Upload, Download, ClipboardList, FileSpreadsheet, Info } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface MaterialMasterProps {
   materials: Material[];
-  setMaterials: React.Dispatch<React.SetStateAction<Material[]>>;
+  setMaterials: React.Dispatch<React.SetStateAction<Material[]>> | ((updater: React.SetStateAction<Material[]>) => void | Promise<void>);
   onBack: () => void;
+  title?: string;
+  subtitle?: string;
+  warehouseBadge?: string;
+  availableCentralMaterials?: Material[];
 }
 
-export const MaterialMaster: React.FC<MaterialMasterProps> = ({ materials, setMaterials, onBack }) => {
+export const MaterialMaster: React.FC<MaterialMasterProps> = ({ 
+  materials, 
+  setMaterials, 
+  onBack,
+  title = 'Maestro Materiales',
+  subtitle = 'Catálogo maestro de SKUs y descripciones',
+  warehouseBadge,
+  availableCentralMaterials
+}) => {
   const [newSku, setNewSku] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newBoxes, setNewBoxes] = useState<string>('');
   const [search, setSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCopyFromCentral = () => {
+    if (!availableCentralMaterials || availableCentralMaterials.length === 0) {
+      alert('No hay materiales en el almacén central para copiar.');
+      return;
+    }
+    if (confirm(`¿Copiar ${availableCentralMaterials.length} materiales del maestro central a este almacén?`)) {
+      setMaterials(prev => {
+        const map = new Map<string, Material>(prev.map(m => [m.sku, m]));
+        availableCentralMaterials.forEach(m => {
+          if (!map.has(m.sku)) {
+            map.set(m.sku, m);
+          }
+        });
+        return Array.from(map.values()).sort((a, b) => a.sku.localeCompare(b.sku));
+      });
+      alert('Materiales copiados exitosamente.');
+    }
+  };
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,109 +84,159 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({ materials, setMa
 
     try {
       const data = await file.arrayBuffer();
-      const workbook = read(data);
+      const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
       if (!jsonData || jsonData.length === 0) {
         alert('El archivo está vacío.');
         return;
       }
 
+      // REGLA ESTRICTA:
+      // Columna A (índice 0) = SKU
+      // Columna B (índice 1) = DESCRIPCIÓN
+      // Columna O (índice 14) = CAJAS_POR_PALLET
+
+      let startIndex = 0;
+
+      // Detectar si la primera fila corresponde a encabezados
+      if (jsonData.length > 0 && Array.isArray(jsonData[0])) {
+        const colAHeader = String(jsonData[0][0] || '').trim().toLowerCase();
+        const colBHeader = String(jsonData[0][1] || '').trim().toLowerCase();
+        const colOHeader = String(jsonData[0][14] || '').trim().toLowerCase();
+
+        const isColAHeader = colAHeader.includes('sku') || 
+                             colAHeader.includes('cod') || 
+                             colAHeader.includes('cód') || 
+                             colAHeader.includes('art') || 
+                             colAHeader.includes('item') ||
+                             colAHeader.includes('material');
+
+        const isColBHeader = colBHeader.includes('desc') || 
+                             colBHeader.includes('prod') || 
+                             colBHeader.includes('nom') || 
+                             colBHeader.includes('detal');
+
+        const isColOHeader = colOHeader.includes('caja') ||
+                             colOHeader.includes('pallet') ||
+                             colOHeader.includes('unid') ||
+                             colOHeader.includes('cant');
+
+        if (isColAHeader || isColBHeader || isColOHeader) {
+          startIndex = 1;
+        }
+      }
+
       const newMaterials: Material[] = [];
       let importedCount = 0;
       let updatedCount = 0;
 
-      // Intentar encontrar los índices de las columnas
-      let skuIdx = 0;
-      let descIdx = 1;
-      let boxesIdx = -1;
-      let startIndex = 0;
-
-      // Buscar encabezados en las primeras 5 filas
-      for (let i = 0; i < Math.min(5, jsonData.length); i++) {
-        const row = jsonData[i];
-        if (!row) continue;
-        
-        const sIdx = row.findIndex(cell => String(cell || '').toLowerCase().includes('sku'));
-        const dIdx = row.findIndex(cell => {
-          const val = String(cell || '').toLowerCase();
-          return val.includes('desc') || val.includes('prod') || val.includes('nombre') || val.includes('material');
-        });
-        const bIdx = row.findIndex(cell => {
-          const val = String(cell || '').toLowerCase();
-          return val.includes('caja') || val.includes('pallet') || val.includes('unid') || val.includes('cant');
-        });
-
-        if (sIdx !== -1 && dIdx !== -1) {
-          skuIdx = sIdx;
-          descIdx = dIdx;
-          boxesIdx = bIdx;
-          startIndex = i + 1;
-          break;
-        }
-        
-        // Si encontramos al menos uno, también lo tomamos como cabecera
-        if (sIdx !== -1 || dIdx !== -1) {
-            if (sIdx !== -1) skuIdx = sIdx;
-            if (dIdx !== -1) descIdx = dIdx;
-            if (bIdx !== -1) boxesIdx = bIdx;
-            startIndex = i + 1;
-            break;
-        }
-      }
-
       for (let i = startIndex; i < jsonData.length; i++) {
         const row = jsonData[i];
-        if (row && row.length > Math.max(skuIdx, descIdx)) {
-            const sku = String(row[skuIdx] || '').trim().toUpperCase();
-            const description = String(row[descIdx] || '').trim().toUpperCase();
-            const boxes = boxesIdx !== -1 ? parseInt(String(row[boxesIdx])) : undefined;
+        if (!row || !Array.isArray(row)) continue;
 
-            if (sku && description) {
-                newMaterials.push({ 
-                  sku, 
-                  description, 
-                  boxesPerPallet: (boxes && !isNaN(boxes)) ? boxes : undefined 
-                });
-            }
+        // Columna A (índice 0) = SKU
+        const rawSku = row[0];
+        // Columna B (índice 1) = DESCRIPCION
+        const rawDesc = row[1];
+        // Columna O (índice 14) = Cajas por pallet
+        // Soporte primario para Columna O (índice 14), con fallback a Columna C (índice 2) si es un archivo de 3 columnas
+        let rawBoxes = row[14];
+        if ((rawBoxes === undefined || rawBoxes === null || String(rawBoxes).trim() === '') && row.length <= 4 && row[2] !== undefined) {
+          rawBoxes = row[2];
         }
+
+        if (rawSku === undefined || rawSku === null) continue;
+
+        const sku = String(rawSku).trim().toUpperCase();
+        if (!sku) continue;
+        if (sku === 'SKU' || sku === 'CODIGO' || sku === 'CÓDIGO' || sku === 'MATERIAL') continue;
+
+        // Columna B = Descripción
+        const description = rawDesc !== undefined && rawDesc !== null
+          ? String(rawDesc).trim().toUpperCase()
+          : '';
+
+        if (!description) continue;
+        if (description === 'DESCRIPCION' || description === 'DESCRIPCIÓN' || description === 'DETALLE') continue;
+
+        let boxesPerPallet: number | undefined = undefined;
+        if (rawBoxes !== undefined && rawBoxes !== null) {
+          const cleaned = String(rawBoxes).trim().replace(',', '.');
+          const parsed = Math.round(Number(cleaned));
+          if (!isNaN(parsed) && parsed > 0 && isFinite(parsed)) {
+            boxesPerPallet = parsed;
+          }
+        }
+
+        newMaterials.push({ 
+          sku, 
+          description, 
+          boxesPerPallet 
+        });
       }
 
       if (newMaterials.length === 0) {
-          alert('No se encontraron SKUs válidos. Asegúrate de que el archivo tenga una columna "SKU" y otra "DESCRIPCION".');
-          return;
+        alert('No se encontraron registros válidos.\n\nFormato requerido:\n- Columna A: Código SKU\n- Columna B: Descripción del Producto\n- Columna O: Cajas por Pallet');
+        return;
       }
 
       setMaterials(prev => {
         const materialMap = new Map<string, Material>(prev.map(m => [m.sku, m]));
         newMaterials.forEach(m => {
-            if (materialMap.has(m.sku)) updatedCount++;
-            else importedCount++;
-            materialMap.set(m.sku, m);
+          if (materialMap.has(m.sku)) {
+            updatedCount++;
+          } else {
+            importedCount++;
+          }
+          materialMap.set(m.sku, m);
         });
         return Array.from(materialMap.values()).sort((a: Material, b: Material) => a.sku.localeCompare(b.sku));
       });
 
-      alert(`Sincronización Exitosa:\n- ${importedCount} SKUs nuevos registrados.\n- ${updatedCount} descripciones actualizadas.`);
-
+      alert(`Sincronización Exitosa:\n- Columna A -> SKU\n- Columna B -> Descripción\n- Columna O -> Cajas por Pallet\n\nResultados:\n- ${importedCount} SKUs nuevos registrados.\n- ${updatedCount} descripciones actualizadas.`);
     } catch (error) {
       console.error('Import error:', error);
-      alert('Error procesando el archivo Excel. Verifica el formato.');
+      alert('Error procesando el archivo Excel. Verifica el formato del archivo.');
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const handleDownloadTemplate = () => {
-      const csvContent = "data:text/csv;charset=utf-8,SKU,DESCRIPCION,CAJAS_POR_PALLET\nCOD-001,MATERIAL DE EJEMPLO A,50\nCOD-002,MATERIAL DE EJEMPLO B,100";
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", "plantilla_maestro_logipro.csv");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    // Generar plantilla oficial: Col A: SKU, Col B: DESCRIPCION, Col O (índice 14): CAJAS_POR_PALLET
+    const headerRow: string[] = new Array(15).fill('');
+    headerRow[0] = 'SKU';
+    headerRow[1] = 'DESCRIPCION';
+    headerRow[14] = 'CAJAS_POR_PALLET';
+
+    const row1: any[] = new Array(15).fill('');
+    row1[0] = 'MAT-001';
+    row1[1] = 'TUBO PVC RIGIDO 110MM X 6M';
+    row1[14] = 50;
+
+    const row2: any[] = new Array(15).fill('');
+    row2[0] = 'MAT-002';
+    row2[1] = 'CABLE SUBTERRANEO 4X10MM CU';
+    row2[14] = 100;
+
+    const row3: any[] = new Array(15).fill('');
+    row3[0] = 'MAT-003';
+    row3[1] = 'CAJA ELECTRICA RECTANGULAR 10X5';
+    row3[14] = 200;
+
+    const wsData = [headerRow, row1, row2, row3];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const cols = new Array(15).fill({ wch: 12 });
+    cols[0] = { wch: 18 };
+    cols[1] = { wch: 45 };
+    cols[14] = { wch: 22 };
+    ws['!cols'] = cols;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Plantilla_Materiales');
+    XLSX.writeFile(wb, 'plantilla_maestro_materiales.xlsx');
   };
 
   const filteredMaterials = materials.filter(m => 
@@ -164,23 +245,50 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({ materials, setMa
   );
 
   return (
-    <div className="flex flex-col h-full max-w-6xl mx-auto p-8 gap-8">
+    <div className="flex flex-col h-full max-w-6xl mx-auto p-6 md:p-8 gap-6 md:gap-8">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div>
-          <h2 className="text-4xl font-black italic uppercase text-white flex items-center gap-4 tracking-tighter">
-            <ClipboardList className="w-10 h-10 text-amber-500" /> Maestro <span className="text-amber-500">Materiales</span>
+          {warehouseBadge && (
+            <span className="bg-zinc-800 text-zinc-300 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-zinc-700 uppercase tracking-widest mb-1.5 inline-block">
+              {warehouseBadge}
+            </span>
+          )}
+          <h2 className="text-3xl md:text-4xl font-black italic uppercase text-white flex items-center gap-4 tracking-tighter">
+            <ClipboardList className="w-8 h-8 md:w-10 md:h-10 text-amber-500" /> {title}
           </h2>
-          <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] mt-1">Catálogo maestro de SKUs y descripciones</p>
+          <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] mt-1">{subtitle}</p>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
+        <div className="flex gap-2 w-full sm:w-auto flex-wrap">
              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
-             <Button variant="ghost" onClick={handleDownloadTemplate} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-amber-500">
-                 <Download className="w-4 h-4 mr-2" /> Plantilla
+             {availableCentralMaterials && availableCentralMaterials.length > 0 && materials.length === 0 && (
+               <Button variant="secondary" onClick={handleCopyFromCentral} className="rounded-xl border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-xs">
+                 Copiar de Central ({availableCentralMaterials.length})
+               </Button>
+             )}
+             <Button variant="ghost" onClick={handleDownloadTemplate} className="text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-amber-500">
+                 <Download className="w-4 h-4 mr-2" /> Plantilla Excel
              </Button>
              <Button variant="secondary" onClick={handleImportClick} className="rounded-xl border-zinc-800">
                  <Upload className="w-4 h-4 mr-2" /> Importar Excel
              </Button>
              <Button variant="secondary" onClick={onBack} className="rounded-xl bg-zinc-950 border-zinc-800">Volver</Button>
+        </div>
+      </div>
+
+      {/* Format Helper Note */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between gap-4 text-xs shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="bg-amber-500/10 p-2 rounded-xl border border-amber-500/20 text-amber-500">
+            <FileSpreadsheet className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="font-bold text-zinc-200">
+              Estructura de Columnas para Importación de Excel:
+            </p>
+            <p className="text-zinc-400 text-[11px] mt-0.5">
+              <strong className="text-amber-400 font-mono">Columna A</strong> = Código SKU • <strong className="text-zinc-200 font-mono">Columna B</strong> = Descripción del Producto • <strong className="text-amber-400 font-mono">Columna O</strong> = Cajas por Pallet
+            </p>
+          </div>
         </div>
       </div>
 

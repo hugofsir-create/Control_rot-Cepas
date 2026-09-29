@@ -247,7 +247,17 @@ export const PalletDetail: React.FC<PalletDetailProps> = ({
                   )}
                 </div>
               )}
-              <span className={`text-[10px] tracking-widest px-2 py-0.5 rounded border font-black ${isClosed ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`}>
+              {pallet.warehouse === 'LA_RURAL' && (
+                <span className="text-[10px] tracking-widest px-2 py-0.5 rounded border font-black bg-zinc-800 text-zinc-300 border-zinc-700 uppercase">
+                  Bodega La Rural
+                </span>
+              )}
+              {pallet.remitoNumber && (
+                <span className="text-[10px] tracking-widest px-2 py-0.5 rounded border font-black bg-zinc-800 text-amber-400 border-zinc-700 uppercase">
+                  Remito #{pallet.remitoNumber}
+                </span>
+              )}
+              <span className={`text-[10px] tracking-widest px-2 py-0.5 rounded border font-black ${isClosed ? 'bg-zinc-800 text-zinc-400 border-zinc-700' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'}`}>
                 {pallet.status}
               </span>
             </h1>

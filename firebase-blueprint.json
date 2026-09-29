@@ -25,9 +25,28 @@
         "closedAt": { "type": "string" },
         "sentAt": { "type": "string" },
         "containerId": { "type": "string" },
-        "aiSummary": { "type": "string" }
+        "aiSummary": { "type": "string" },
+        "warehouse": { "type": "string" },
+        "remitoNumber": { "type": "string" },
+        "remitoDate": { "type": "string" },
+        "remitoId": { "type": "string" }
       },
       "required": ["id", "number", "items", "status", "createdAt"]
+    },
+    "RuralRemito": {
+      "title": "RuralRemito",
+      "description": "Grupo de pallets de Bodega La Rural asociados a un número de remito.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "number" },
+        "remitoNumber": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "palletIds": { "type": "array" },
+        "note": { "type": "string" },
+        "carrier": { "type": "string" }
+      },
+      "required": ["id", "number", "remitoNumber", "createdAt", "palletIds"]
     },
     "Container": {
       "title": "Container",
@@ -62,6 +81,10 @@
       "schema": "Material",
       "description": "Colección de materiales en el maestro."
     },
+    "/ruralMaterials/{materialId}": {
+      "schema": "Material",
+      "description": "Colección de materiales en el maestro de Bodega La Rural."
+    },
     "/pallets/{palletId}": {
       "schema": "Pallet",
       "description": "Colección de pallets."
@@ -69,6 +92,10 @@
     "/containers/{containerId}": {
       "schema": "Container",
       "description": "Colección de contenedores de despacho."
+    },
+    "/ruralRemitos/{remitoId}": {
+      "schema": "RuralRemito",
+      "description": "Colección de remitos agrupados de Bodega La Rural."
     },
     "/activityLogs/{logId}": {
       "schema": "ActivityLog",
