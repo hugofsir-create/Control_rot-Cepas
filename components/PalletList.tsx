@@ -168,8 +168,8 @@ export const PalletList: React.FC<PalletListProps> = ({
 
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
         <div>
-           <h2 className="text-2xl font-bold text-zinc-100">Control de Pallets</h2>
-           <p className="text-zinc-400">Gestión de carga y etiquetado de pallets.</p>
+           <h2 className="text-2xl font-bold text-zinc-100">Cargas Cepas</h2>
+           <p className="text-zinc-400">Gestión de carga y control de pallets de Cepas.</p>
         </div>
         <div className="flex gap-4 flex-wrap">
            <div className="flex items-center gap-2 px-4 py-2 bg-zinc-900 rounded shadow-sm border border-zinc-800">

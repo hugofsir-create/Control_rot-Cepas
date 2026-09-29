@@ -247,9 +247,13 @@ export const PalletDetail: React.FC<PalletDetailProps> = ({
                   )}
                 </div>
               )}
-              {pallet.warehouse === 'LA_RURAL' && (
+              {pallet.warehouse === 'LA_RURAL' ? (
                 <span className="text-[10px] tracking-widest px-2 py-0.5 rounded border font-black bg-zinc-800 text-zinc-300 border-zinc-700 uppercase">
                   Bodega La Rural
+                </span>
+              ) : (
+                <span className="text-[10px] tracking-widest px-2 py-0.5 rounded border font-black bg-zinc-800 text-zinc-300 border-zinc-700 uppercase">
+                  Cargas Cepas
                 </span>
               )}
               {pallet.remitoNumber && (

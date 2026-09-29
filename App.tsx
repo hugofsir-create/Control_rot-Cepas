@@ -390,7 +390,7 @@ const App: React.FC = () => {
     setPallets([newPallet, ...pallets]);
     setSelectedPalletId(newPallet.id);
     setView('PALLET_DETAIL');
-    addLog('Pallet Creado', `Se inició el Pallet #${nextNumber} en Almacén Central`, 'SUCCESS');
+    addLog('Pallet Creado', `Se inició el Pallet #${nextNumber} en Cargas Cepas`, 'SUCCESS');
   };
 
   // Creación específica para Bodega La Rural con numeración independiente
@@ -578,7 +578,16 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (view) {
       case 'MATERIALS':
-        return <MaterialMaster materials={materials} setMaterials={(m) => { setMaterials(m); addLog('Maestro Actualizado', 'Se realizaron cambios en la base de materiales', 'INFO'); }} onBack={() => setView('DASHBOARD')} />;
+        return (
+          <MaterialMaster 
+            materials={materials} 
+            setMaterials={(m) => { setMaterials(m); addLog('Maestro Actualizado', 'Se realizaron cambios en la base de materiales de Cepas', 'INFO'); }} 
+            onBack={() => setView('DASHBOARD')} 
+            title="Maestro Cepas"
+            subtitle="Catálogo maestro de SKUs y descripciones para Cargas Cepas"
+            warehouseBadge="Cargas Cepas"
+          />
+        );
       case 'RURAL_WAREHOUSE':
         return (
           <RuralWarehouse
@@ -770,7 +779,7 @@ const App: React.FC = () => {
         
         <nav className="flex-1 py-6 space-y-2 px-2 lg:px-4">
           {[
-            { id: 'DASHBOARD', icon: Box, label: 'Cargas Central' },
+            { id: 'DASHBOARD', icon: Box, label: 'Cargas Cepas' },
             { id: 'RURAL_WAREHOUSE', icon: Building2, label: 'Bodega La Rural' },
             { id: 'CONTAINER_LIST', icon: Truck, label: 'Depósito / Salidas' },
             { id: 'MATERIALS', icon: Database, label: 'Maestro Materiales' },
@@ -843,7 +852,7 @@ const App: React.FC = () => {
                     }} 
                     className="w-full justify-start py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold border-amber-500"
                   >
-                    <Home className="w-4 h-4 mr-3 text-black" /> Almacén Central (Cargas)
+                    <Home className="w-4 h-4 mr-3 text-black" /> Cargas Cepas (Almacén Cepas)
                   </Button>
                   <Button 
                     onClick={() => {
@@ -907,7 +916,7 @@ const App: React.FC = () => {
                 </div>
               </div>
               <p className="text-[10px] text-center text-zinc-600 font-bold uppercase tracking-widest leading-relaxed mt-4">
-                LogiPro utiliza almacenamiento en la nube en tiempo real (Cloud Firestore).<br/>Tus datos de Almacén Central y Bodega La Rural están sincronizados y seguros.
+                LogiPro utiliza almacenamiento en la nube en tiempo real (Cloud Firestore).<br/>Tus datos de Cargas Cepas y Bodega La Rural están sincronizados y seguros.
               </p>
             </div>
           </div>

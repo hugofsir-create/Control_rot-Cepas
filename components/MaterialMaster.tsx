@@ -42,10 +42,10 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
 
   const handleCopyFromCentral = () => {
     if (!availableCentralMaterials || availableCentralMaterials.length === 0) {
-      alert('No hay materiales en el almacén central para copiar.');
+      alert('No hay materiales en el maestro de Cepas para copiar.');
       return;
     }
-    if (confirm(`¿Copiar ${availableCentralMaterials.length} materiales del maestro central a esta base de datos?`)) {
+    if (confirm(`¿Copiar ${availableCentralMaterials.length} materiales del maestro de Cepas a esta base de datos?`)) {
       setMaterials(prev => {
         const map = new Map<string, Material>(prev.map(m => [m.sku, m]));
         availableCentralMaterials.forEach(m => {
@@ -244,7 +244,7 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
              {availableCentralMaterials && availableCentralMaterials.length > 0 && materials.length === 0 && (
                <Button variant="secondary" onClick={handleCopyFromCentral} className="rounded-xl border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-xs">
-                 Copiar de Central ({availableCentralMaterials.length})
+                 Copiar de Cepas ({availableCentralMaterials.length})
                </Button>
              )}
              <Button variant="ghost" onClick={handleDownloadTemplate} className="text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-amber-500">
