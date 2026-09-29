@@ -1,8 +1,19 @@
 import React, { useState, useRef } from 'react';
 import { Material } from '../types.ts';
 import { Button } from './ui/Button.tsx';
-import { Plus, Trash2, Search, Upload, Download, ClipboardList, FileSpreadsheet, Info } from 'lucide-react';
+import { 
+  Plus, 
+  Trash2, 
+  Search, 
+  Upload, 
+  Download, 
+  ClipboardList, 
+  FileSpreadsheet, 
+  Database,
+  CheckCircle2
+} from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { parseMaterialsFromExcel } from '../services/materialDatabase.ts';
 
 interface MaterialMasterProps {
   materials: Material[];
@@ -34,7 +45,7 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
       alert('No hay materiales en el almacén central para copiar.');
       return;
     }
-    if (confirm(`¿Copiar ${availableCentralMaterials.length} materiales del maestro central a este almacén?`)) {
+    if (confirm(`¿Copiar ${availableCentralMaterials.length} materiales del maestro central a esta base de datos?`)) {
       setMaterials(prev => {
         const map = new Map<string, Material>(prev.map(m => [m.sku, m]));
         availableCentralMaterials.forEach(m => {
@@ -44,7 +55,7 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
         });
         return Array.from(map.values()).sort((a, b) => a.sku.localeCompare(b.sku));
       });
-      alert('Materiales copiados exitosamente.');
+      alert('Materiales copiados y guardados exitosamente en la base de datos.');
     }
   };
 
@@ -58,7 +69,7 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
     if (!sku || !desc) return;
 
     if (materials.some(m => m.sku === sku)) {
-      alert('Este SKU ya existe en el maestro.');
+      alert('Este SKU ya existe en la base de datos.');
       return;
     }
 
@@ -69,8 +80,15 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
   };
 
   const handleDelete = (sku: string) => {
-    if (confirm(`¿Eliminar SKU ${sku} del maestro?`)) {
+    if (confirm(`¿Eliminar SKU ${sku} de la base de datos?`)) {
       setMaterials(prev => prev.filter(m => m.sku !== sku));
+    }
+  };
+
+  const handleClearAll = () => {
+    if (materials.length === 0) return;
+    if (confirm(`¿ATENCIÓN: Deseas VACIAR todos los ${materials.length} materiales registrados en esta base de datos?`)) {
+      setMaterials([]);
     }
   };
 
@@ -84,107 +102,25 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
 
     try {
       const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+      const parseResult = parseMaterialsFromExcel(data);
 
-      if (!jsonData || jsonData.length === 0) {
-        alert('El archivo está vacío.');
+      if (parseResult.materials.length === 0) {
+        alert(
+          'No se encontraron registros válidos en el archivo Excel.\n\n' +
+          'Asegúrate de que contenga:\n' +
+          '• Columna A: Código SKU\n' +
+          '• Columna B: Descripción del Producto\n' +
+          '• Columna O: Cajas por Pallet (Opcional)'
+        );
         return;
       }
 
-      // REGLA ESTRICTA:
-      // Columna A (índice 0) = SKU
-      // Columna B (índice 1) = DESCRIPCIÓN
-      // Columna O (índice 14) = CAJAS_POR_PALLET
-
-      let startIndex = 0;
-
-      // Detectar si la primera fila corresponde a encabezados
-      if (jsonData.length > 0 && Array.isArray(jsonData[0])) {
-        const colAHeader = String(jsonData[0][0] || '').trim().toLowerCase();
-        const colBHeader = String(jsonData[0][1] || '').trim().toLowerCase();
-        const colOHeader = String(jsonData[0][14] || '').trim().toLowerCase();
-
-        const isColAHeader = colAHeader.includes('sku') || 
-                             colAHeader.includes('cod') || 
-                             colAHeader.includes('cód') || 
-                             colAHeader.includes('art') || 
-                             colAHeader.includes('item') ||
-                             colAHeader.includes('material');
-
-        const isColBHeader = colBHeader.includes('desc') || 
-                             colBHeader.includes('prod') || 
-                             colBHeader.includes('nom') || 
-                             colBHeader.includes('detal');
-
-        const isColOHeader = colOHeader.includes('caja') ||
-                             colOHeader.includes('pallet') ||
-                             colOHeader.includes('unid') ||
-                             colOHeader.includes('cant');
-
-        if (isColAHeader || isColBHeader || isColOHeader) {
-          startIndex = 1;
-        }
-      }
-
-      const newMaterials: Material[] = [];
       let importedCount = 0;
       let updatedCount = 0;
 
-      for (let i = startIndex; i < jsonData.length; i++) {
-        const row = jsonData[i];
-        if (!row || !Array.isArray(row)) continue;
-
-        // Columna A (índice 0) = SKU
-        const rawSku = row[0];
-        // Columna B (índice 1) = DESCRIPCION
-        const rawDesc = row[1];
-        // Columna O (índice 14) = Cajas por pallet
-        // Soporte primario para Columna O (índice 14), con fallback a Columna C (índice 2) si es un archivo de 3 columnas
-        let rawBoxes = row[14];
-        if ((rawBoxes === undefined || rawBoxes === null || String(rawBoxes).trim() === '') && row.length <= 4 && row[2] !== undefined) {
-          rawBoxes = row[2];
-        }
-
-        if (rawSku === undefined || rawSku === null) continue;
-
-        const sku = String(rawSku).trim().toUpperCase();
-        if (!sku) continue;
-        if (sku === 'SKU' || sku === 'CODIGO' || sku === 'CÓDIGO' || sku === 'MATERIAL') continue;
-
-        // Columna B = Descripción
-        const description = rawDesc !== undefined && rawDesc !== null
-          ? String(rawDesc).trim().toUpperCase()
-          : '';
-
-        if (!description) continue;
-        if (description === 'DESCRIPCION' || description === 'DESCRIPCIÓN' || description === 'DETALLE') continue;
-
-        let boxesPerPallet: number | undefined = undefined;
-        if (rawBoxes !== undefined && rawBoxes !== null) {
-          const cleaned = String(rawBoxes).trim().replace(',', '.');
-          const parsed = Math.round(Number(cleaned));
-          if (!isNaN(parsed) && parsed > 0 && isFinite(parsed)) {
-            boxesPerPallet = parsed;
-          }
-        }
-
-        newMaterials.push({ 
-          sku, 
-          description, 
-          boxesPerPallet 
-        });
-      }
-
-      if (newMaterials.length === 0) {
-        alert('No se encontraron registros válidos.\n\nFormato requerido:\n- Columna A: Código SKU\n- Columna B: Descripción del Producto\n- Columna O: Cajas por Pallet');
-        return;
-      }
-
-      setMaterials(prev => {
+      await setMaterials(prev => {
         const materialMap = new Map<string, Material>(prev.map(m => [m.sku, m]));
-        newMaterials.forEach(m => {
+        parseResult.materials.forEach(m => {
           if (materialMap.has(m.sku)) {
             updatedCount++;
           } else {
@@ -195,10 +131,20 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
         return Array.from(materialMap.values()).sort((a: Material, b: Material) => a.sku.localeCompare(b.sku));
       });
 
-      alert(`Sincronización Exitosa:\n- Columna A -> SKU\n- Columna B -> Descripción\n- Columna O -> Cajas por Pallet\n\nResultados:\n- ${importedCount} SKUs nuevos registrados.\n- ${updatedCount} descripciones actualizadas.`);
-    } catch (error) {
+      alert(
+        `Base de Datos de Materiales Sincronizada con Éxito:\n\n` +
+        `• ${parseResult.materials.length} materiales procesados correctamente.\n` +
+        `• Columna A [${parseResult.detectedColumns.skuCol}]: Código SKU\n` +
+        `• Columna B [${parseResult.detectedColumns.descCol}]: Descripción Oficial\n` +
+        `• Columna O [${parseResult.detectedColumns.boxesCol}]: Cajas por Pallet\n\n` +
+        `Impacto en Base de Datos:\n` +
+        `• ${importedCount} SKUs nuevos incorporados.\n` +
+        `• ${updatedCount} registros actualizados.\n` +
+        `• Todos los datos han sido almacenados de forma permanente.`
+      );
+    } catch (error: any) {
       console.error('Import error:', error);
-      alert('Error procesando el archivo Excel. Verifica el formato del archivo.');
+      alert(`Error al procesar el archivo Excel: ${error?.message || 'Verifica el formato del archivo'}`);
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -239,6 +185,37 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
     XLSX.writeFile(wb, 'plantilla_maestro_materiales.xlsx');
   };
 
+  const handleExportDatabaseExcel = () => {
+    if (materials.length === 0) {
+      alert('La base de datos de materiales está vacía.');
+      return;
+    }
+
+    const headerRow: string[] = new Array(15).fill('');
+    headerRow[0] = 'SKU';
+    headerRow[1] = 'DESCRIPCION';
+    headerRow[14] = 'CAJAS_POR_PALLET';
+
+    const rows = materials.map(m => {
+      const r: any[] = new Array(15).fill('');
+      r[0] = m.sku;
+      r[1] = m.description;
+      r[14] = m.boxesPerPallet || '';
+      return r;
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet([headerRow, ...rows]);
+    const cols = new Array(15).fill({ wch: 12 });
+    cols[0] = { wch: 18 };
+    cols[1] = { wch: 45 };
+    cols[14] = { wch: 22 };
+    ws['!cols'] = cols;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Maestro_Materiales');
+    XLSX.writeFile(wb, `Base_Datos_Materiales_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   const filteredMaterials = materials.filter(m => 
     m.sku.toLowerCase().includes(search.toLowerCase()) || 
     m.description.toLowerCase().includes(search.toLowerCase())
@@ -256,7 +233,12 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
           <h2 className="text-3xl md:text-4xl font-black italic uppercase text-white flex items-center gap-4 tracking-tighter">
             <ClipboardList className="w-8 h-8 md:w-10 md:h-10 text-amber-500" /> {title}
           </h2>
-          <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] mt-1">{subtitle}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="inline-flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-md">
+              <Database className="w-3 h-3 text-amber-500" /> Base de Datos Activa ({materials.length} registros)
+            </span>
+            <span className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">{subtitle}</span>
+          </div>
         </div>
         <div className="flex gap-2 w-full sm:w-auto flex-wrap">
              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
@@ -268,10 +250,18 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
              <Button variant="ghost" onClick={handleDownloadTemplate} className="text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-amber-500">
                  <Download className="w-4 h-4 mr-2" /> Plantilla Excel
              </Button>
-             <Button variant="secondary" onClick={handleImportClick} className="rounded-xl border-zinc-800">
-                 <Upload className="w-4 h-4 mr-2" /> Importar Excel
+             <Button variant="secondary" onClick={handleExportDatabaseExcel} className="rounded-xl border-zinc-800 text-xs">
+                 <Download className="w-4 h-4 mr-2 text-amber-500" /> Exportar Base
              </Button>
-             <Button variant="secondary" onClick={onBack} className="rounded-xl bg-zinc-950 border-zinc-800">Volver</Button>
+             <Button variant="secondary" onClick={handleImportClick} className="rounded-xl border-zinc-800 text-xs">
+                 <Upload className="w-4 h-4 mr-2 text-amber-500" /> Importar Excel
+             </Button>
+             {materials.length > 0 && (
+               <Button variant="secondary" onClick={handleClearAll} className="rounded-xl border-zinc-800 text-zinc-400 hover:text-red-400 text-xs" title="Vaciar todos los registros del maestro">
+                 <Trash2 className="w-4 h-4 mr-1.5" /> Vaciar
+               </Button>
+             )}
+             <Button variant="secondary" onClick={onBack} className="rounded-xl bg-zinc-950 border-zinc-800 text-xs">Volver</Button>
         </div>
       </div>
 
@@ -282,8 +272,11 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
             <FileSpreadsheet className="w-5 h-5" />
           </div>
           <div>
-            <p className="font-bold text-zinc-200">
+            <p className="font-bold text-zinc-200 flex items-center gap-2">
               Estructura de Columnas para Importación de Excel:
+              <span className="text-[10px] text-amber-400 font-mono font-normal flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-amber-500" /> Guardado permanente en Base de Datos
+              </span>
             </p>
             <p className="text-zinc-400 text-[11px] mt-0.5">
               <strong className="text-amber-400 font-mono">Columna A</strong> = Código SKU • <strong className="text-zinc-200 font-mono">Columna B</strong> = Descripción del Producto • <strong className="text-amber-400 font-mono">Columna O</strong> = Cajas por Pallet
@@ -334,7 +327,7 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
       <div className="flex-1 bg-zinc-900/30 rounded-[2.5rem] border border-zinc-800/50 flex flex-col overflow-hidden shadow-2xl">
         <div className="p-6 border-b border-zinc-800/50 flex flex-col sm:flex-row justify-between items-center gap-6 bg-zinc-900/50">
            <div className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">
-               Registros Totales: <span className="text-amber-500 text-sm italic">{materials.length}</span>
+               Registros Totales en Base de Datos: <span className="text-amber-500 text-sm italic">{materials.length}</span>
            </div>
            <div className="relative w-full sm:w-80">
              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
@@ -352,17 +345,17 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
           <table className="w-full text-left">
             <thead className="bg-zinc-950/80 backdrop-blur sticky top-0 z-10 shadow-sm">
               <tr>
-                <th className="px-3 py-1.5 text-[8px] font-black text-zinc-600 uppercase tracking-widest w-1/4">SKU</th>
-                <th className="px-3 py-1.5 text-[8px] font-black text-zinc-600 uppercase tracking-widest">Descripción Oficial</th>
-                <th className="px-3 py-1.5 text-[8px] font-black text-zinc-600 uppercase tracking-widest w-20 text-center">Cjs/Plt</th>
+                <th className="px-3 py-1.5 text-[8px] font-black text-zinc-600 uppercase tracking-widest w-1/4">SKU (Col A)</th>
+                <th className="px-3 py-1.5 text-[8px] font-black text-zinc-600 uppercase tracking-widest">Descripción Oficial (Col B)</th>
+                <th className="px-3 py-1.5 text-[8px] font-black text-zinc-600 uppercase tracking-widest w-24 text-center">Cajas (Col O)</th>
                 <th className="px-3 py-1.5 text-[8px] font-black text-zinc-600 uppercase tracking-widest w-12 text-right"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
               {filteredMaterials.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-2 py-8 text-center text-zinc-800 italic uppercase font-black opacity-10 tracking-[0.4em]">
-                    No hay resultados
+                  <td colSpan={4} className="px-2 py-8 text-center text-zinc-700 italic uppercase font-black tracking-[0.2em] text-xs">
+                    Base de datos sin registros. Importa un archivo Excel o registra manualmente.
                   </td>
                 </tr>
               ) : (
@@ -370,12 +363,12 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
                   <tr key={m.sku} className="hover:bg-zinc-800/30 group transition-all">
                     <td className="px-3 py-1 font-mono text-amber-500 font-black text-xs italic tracking-tighter leading-none">{m.sku}</td>
                     <td className="px-3 py-1 text-zinc-300 font-bold text-[8px] uppercase tracking-widest leading-tight truncate max-w-[180px]">{m.description}</td>
-                    <td className="px-3 py-1 text-center font-mono text-zinc-500 font-black text-[10px] italic">{m.boxesPerPallet || '-'}</td>
+                    <td className="px-3 py-1 text-center font-mono text-zinc-400 font-black text-[10px] italic">{m.boxesPerPallet || '-'}</td>
                     <td className="px-3 py-1 text-right opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
                         onClick={() => handleDelete(m.sku)}
                         className="text-zinc-600 hover:text-red-500 p-0.5 transition-colors"
-                        title="Eliminar"
+                        title="Eliminar de la base de datos"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -390,3 +383,4 @@ export const MaterialMaster: React.FC<MaterialMasterProps> = ({
     </div>
   );
 };
+

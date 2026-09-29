@@ -41,6 +41,10 @@ import {
   getDocFromServer 
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './services/firebase.ts';
+import { 
+  saveMaterialsToDatabase, 
+  getLocalDatabaseMaterials 
+} from './services/materialDatabase.ts';
 
 const App: React.FC = () => {
   const [materialsLoaded, setMaterialsLoaded] = useState(false);
@@ -57,50 +61,82 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const [materials, localSetMaterials] = useState<Material[]>([]);
+  const [materials, localSetMaterials] = useState<Material[]>(() => getLocalDatabaseMaterials('materials'));
   const [pallets, localSetPallets] = useState<Pallet[]>([]);
   const [activityLogs, localSetActivityLogs] = useState<ActivityLog[]>([]);
   const [containers, localSetContainers] = useState<any[]>([]);
   const [ruralRemitos, localSetRuralRemitos] = useState<RuralRemito[]>([]);
-  const [ruralMaterials, localSetRuralMaterials] = useState<Material[]>([]);
+  const [ruralMaterials, localSetRuralMaterials] = useState<Material[]>(() => getLocalDatabaseMaterials('ruralMaterials'));
 
   const isLoading = !isTimerFinished || !materialsLoaded || !palletsLoaded || !containersLoaded || !ruralRemitosLoaded || !ruralMaterialsLoaded || !logsLoaded;
 
   useEffect(() => {
-    // Escuchar materiales en tiempo real
+    // Escuchar materiales en tiempo real desde la base de datos
     const unsubMaterials = onSnapshot(collection(db, 'materials'), (snapshot) => {
       const list: Material[] = [];
-      snapshot.forEach(d => list.push(d.data() as Material));
-      
-      // Sembrar datos de demostración si la base de datos está vacía
-      if (snapshot.empty && list.length === 0) {
-        const defaultMaterials = [
-          { sku: 'ELEC-100', description: 'MOTOR ELÉCTRICO TRIFÁSICO 10HP', boxesPerPallet: 24 },
-          { sku: 'TUB-PVC-50', description: 'TUBO PVC PRESIÓN 50MM X 6M', boxesPerPallet: 100 },
-        ];
-        Promise.all(defaultMaterials.map(m => setDoc(doc(db, 'materials', m.sku), m)))
-          .then(() => setMaterialsLoaded(true))
-          .catch((e) => {
-            handleFirestoreError(e, OperationType.WRITE, 'materials/seed');
-            setMaterialsLoaded(true);
+      snapshot.forEach(d => {
+        const data = d.data();
+        if (data.sku && data.description) {
+          list.push({
+            sku: String(data.sku).trim().toUpperCase(),
+            description: String(data.description).trim().toUpperCase(),
+            boxesPerPallet: data.boxesPerPallet ? Number(data.boxesPerPallet) : undefined
           });
+        }
+      });
+      list.sort((a, b) => a.sku.localeCompare(b.sku));
+      
+      // Si Firestore está vacío pero hay datos en caché local, preservarlos
+      if (snapshot.empty && list.length === 0) {
+        const localCached = getLocalDatabaseMaterials('materials');
+        if (localCached.length > 0) {
+          localSetMaterials(localCached);
+          saveMaterialsToDatabase('materials', localCached);
+        } else {
+          const defaultMaterials = [
+            { sku: 'ELEC-100', description: 'MOTOR ELÉCTRICO TRIFÁSICO 10HP', boxesPerPallet: 24 },
+            { sku: 'TUB-PVC-50', description: 'TUBO PVC PRESIÓN 50MM X 6M', boxesPerPallet: 100 },
+          ];
+          localSetMaterials(defaultMaterials);
+          saveMaterialsToDatabase('materials', defaultMaterials);
+        }
       } else {
         localSetMaterials(list);
-        setMaterialsLoaded(true);
+        try {
+          localStorage.setItem('logipro_db_materials_central', JSON.stringify(list));
+        } catch {}
       }
+      setMaterialsLoaded(true);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'materials');
+      console.warn('Firestore materials offline, using local database cache', error);
+      const cached = getLocalDatabaseMaterials('materials');
+      if (cached.length > 0) localSetMaterials(cached);
       setMaterialsLoaded(true);
     });
 
     // Escuchar materiales de Bodega La Rural en tiempo real
     const unsubRuralMaterials = onSnapshot(collection(db, 'ruralMaterials'), (snapshot) => {
       const list: Material[] = [];
-      snapshot.forEach(d => list.push(d.data() as Material));
+      snapshot.forEach(d => {
+        const data = d.data();
+        if (data.sku && data.description) {
+          list.push({
+            sku: String(data.sku).trim().toUpperCase(),
+            description: String(data.description).trim().toUpperCase(),
+            boxesPerPallet: data.boxesPerPallet ? Number(data.boxesPerPallet) : undefined
+          });
+        }
+      });
+      list.sort((a, b) => a.sku.localeCompare(b.sku));
       localSetRuralMaterials(list);
+      try {
+        localStorage.setItem('logipro_db_materials_rural', JSON.stringify(list));
+      } catch {}
       setRuralMaterialsLoaded(true);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'ruralMaterials');
+      console.warn('Firestore ruralMaterials offline, using local database cache', error);
+      const cached = getLocalDatabaseMaterials('ruralMaterials');
+      if (cached.length > 0) localSetRuralMaterials(cached);
       setRuralMaterialsLoaded(true);
     });
 
@@ -175,65 +211,13 @@ const App: React.FC = () => {
   const setMaterials = async (updater: React.SetStateAction<Material[]>) => {
     const resolved = typeof updater === 'function' ? updater(materials) : updater;
     localSetMaterials(resolved);
-    
-    const currentSKUs = new Set(materials.map(m => m.sku));
-    const newSKUs = new Set(resolved.map(m => m.sku));
-
-    // Guardar/Actualizar
-    for (const m of resolved) {
-      const existing = materials.find(old => old.sku === m.sku);
-      if (!existing || existing.description !== m.description || existing.boxesPerPallet !== m.boxesPerPallet) {
-        try {
-          await setDoc(doc(db, 'materials', m.sku), m);
-        } catch (e) {
-          handleFirestoreError(e, OperationType.WRITE, `materials/${m.sku}`);
-        }
-      }
-    }
-
-    // Borrar eliminados (con salvaguarda de tamaño local y conexión viva)
-    if (resolved.length < materials.length && materials.length > 0) {
-      for (const m of materials) {
-        if (!newSKUs.has(m.sku)) {
-          try {
-            await deleteDoc(doc(db, 'materials', m.sku));
-          } catch (e) {
-            handleFirestoreError(e, OperationType.DELETE, `materials/${m.sku}`);
-          }
-        }
-      }
-    }
+    await saveMaterialsToDatabase('materials', resolved, materials);
   };
 
   const setRuralMaterials = async (updater: React.SetStateAction<Material[]>) => {
     const resolved = typeof updater === 'function' ? updater(ruralMaterials) : updater;
     localSetRuralMaterials(resolved);
-
-    const currentSKUs = new Set(ruralMaterials.map(m => m.sku));
-    const newSKUs = new Set(resolved.map(m => m.sku));
-
-    for (const m of resolved) {
-      const existing = ruralMaterials.find(old => old.sku === m.sku);
-      if (!existing || existing.description !== m.description || existing.boxesPerPallet !== m.boxesPerPallet) {
-        try {
-          await setDoc(doc(db, 'ruralMaterials', m.sku), m);
-        } catch (e) {
-          handleFirestoreError(e, OperationType.WRITE, `ruralMaterials/${m.sku}`);
-        }
-      }
-    }
-
-    if (resolved.length < ruralMaterials.length && ruralMaterials.length > 0) {
-      for (const m of ruralMaterials) {
-        if (!newSKUs.has(m.sku)) {
-          try {
-            await deleteDoc(doc(db, 'ruralMaterials', m.sku));
-          } catch (e) {
-            handleFirestoreError(e, OperationType.DELETE, `ruralMaterials/${m.sku}`);
-          }
-        }
-      }
-    }
+    await saveMaterialsToDatabase('ruralMaterials', resolved, ruralMaterials);
   };
 
   const setPallets = async (updater: React.SetStateAction<Pallet[]>) => {
